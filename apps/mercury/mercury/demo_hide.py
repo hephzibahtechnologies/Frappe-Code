@@ -27,11 +27,7 @@ LIMITS - be honest about these
 import frappe
 
 # Empty this list to show everything again.
-HIDDEN_PROJECTS = [
-    "PROJ-0002",  # new demo project           (Hephzibah Technologies Inc)
-    "PROJ-0004",  # test2                      (Hephzibah Technologies India)
-    "PROJ-0005",  # Mr Adam - Namibia Construction - PAUSED, do not delete
-]
+HIDDEN_PROJECTS: list[str] = []
 
 
 def _quoted() -> str:
