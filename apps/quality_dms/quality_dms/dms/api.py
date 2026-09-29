@@ -108,9 +108,19 @@ def acknowledge_document(document, e_signature=None):
     return True
 
 
-def _insert_audit_log(action, document=None, request=None):
-    """Single insertion point for all DMS Audit Log entries."""
+def _insert_audit_log(action, document=None, request=None, document_snapshot=None):
+    """Single insertion point for all DMS Audit Log entries.
+
+    document_snapshot captures the document's own descriptive fields (title,
+    department, category, version, document_number, file) as plain text at
+    the time of the event -- not Links, so this row stays fully readable even
+    after the document itself is deleted (the one event this audit trail
+    exists to record, and the one moment the source document can no longer
+    answer for itself)."""
     try:
+        doc_fields = {
+            f"document_{k}": v for k, v in (document_snapshot or {}).items()
+        }
         frappe.get_doc({
             "doctype": "DMS Audit Log",
             "document": document,
@@ -119,6 +129,7 @@ def _insert_audit_log(action, document=None, request=None):
             "user": frappe.session.user,
             "timestamp": now_datetime(),
             "ip_address": getattr(frappe.local, "request_ip", ""),
+            **doc_fields,
         }).insert(ignore_permissions=True)
     except Exception:
         frappe.log_error(frappe.get_traceback(), "DMS: Failed to write audit log")
@@ -139,7 +150,19 @@ def log_audit_event(doc, method):
     else:
         action = "Updated"
 
-    _insert_audit_log(action=action, document=doc.name)
+    # Captured from the live doc on every event (cheap, always available) so
+    # the snapshot is already in place well before a later deletion, rather
+    # than something that only gets populated specially for on_trash.
+    snapshot = {
+        "title": doc.title,
+        "department": doc.department,
+        "category": doc.category,
+        "version": doc.version,
+        "number": doc.document_number,
+        "file": doc.file,
+    }
+
+    _insert_audit_log(action=action, document=doc.name, document_snapshot=snapshot)
 
 
 def log_request_audit_event(doc, method):
