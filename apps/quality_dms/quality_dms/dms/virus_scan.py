@@ -285,8 +285,20 @@ def _scan_zip_container(content, file_name):
 						rel = z.read(n)
 					except Exception:
 						continue
-					if b'TargetMode="External"' in rel and (b"http://" in rel or b"https://" in rel):
-						threats.append(f"External/remote reference in Office relationships: {file_name}")
+					# Only remote-template injection is a real threat: an ordinary
+					# hyperlink in the document body is ALSO TargetMode="External"
+					# with an http(s) target -- that's simply how Word stores any
+					# clickable link, and flagging it made virtually every RFP/
+					# report with a citation or website link a false positive.
+					# The attack this guards against specifically swaps the
+					# document's *template* relationship (word/_rels/settings.xml
+					# .rels, relationship type ".../attachedTemplate") for a
+					# remote .dotm that can carry macros -- so only that
+					# relationship type is a threat signal.
+					if b"/attachedTemplate" in rel and b'TargetMode="External"' in rel and (
+						b"http://" in rel or b"https://" in rel
+					):
+						threats.append(f"Remote template injection in Office relationships: {file_name}")
 						result = SUSPICIOUS
 						break
 
