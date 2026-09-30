@@ -93,6 +93,7 @@
   "other_charges_calculation",
   "packing_list",
   "packed_items",
+  "is_subcontracted",
   "pricing_rule_details",
   "pricing_rules",
   "contact_info",
@@ -1066,6 +1067,16 @@
    "label": "Packed Items",
    "options": "Packed Item",
    "print_hide": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_subcontracted",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Is Subcontracted",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "payment_schedule_section",

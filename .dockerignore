@@ -1,0 +1,19 @@
+# Keep the local dev image build context small and avoid baking in
+# site-runtime data that's actually served from the frappe_sites Docker
+# volume at runtime anyway (this directory gets shadowed by that mount).
+.git
+.github
+.claude
+node_modules
+**/node_modules
+__pycache__
+**/__pycache__
+*.pyc
+env/
+sites/*/logs/
+sites/*/private/backups/
+sites/*/public/files/
+sites/*/private/files/
+sites/assets/
+archived/
+*.zip

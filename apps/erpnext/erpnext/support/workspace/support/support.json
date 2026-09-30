@@ -25,17 +25,6 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Issue",
-   "link_count": 0,
-   "link_to": "Issue",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Issue Type",
    "link_count": 0,
    "link_to": "Issue Type",
@@ -172,7 +161,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-01-02 17:45:04.203273",
+ "modified": "2026-08-17 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Support",

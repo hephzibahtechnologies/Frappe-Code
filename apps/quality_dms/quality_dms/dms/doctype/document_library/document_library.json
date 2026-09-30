@@ -13,6 +13,7 @@
   "type",
   "project",
   "department",
+  "applies_to_all_departments",
   "category",
   "col_info_break",
   "document_number",
@@ -109,6 +110,13 @@
    "label": "Department",
    "options": "Department",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "When checked, this document is visible to every department, not just the one above (which still records who owns/publishes it).",
+   "fieldname": "applies_to_all_departments",
+   "fieldtype": "Check",
+   "label": "Applies to All Departments"
   },
   {
    "fieldname": "category",
@@ -246,7 +254,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-29 12:30:00.000000",
+ "modified": "2026-08-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "DMS",
  "name": "Document Library",

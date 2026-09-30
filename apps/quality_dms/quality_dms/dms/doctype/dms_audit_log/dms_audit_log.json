@@ -9,6 +9,12 @@
  "engine": "InnoDB",
  "field_order": [
   "document",
+  "document_title",
+  "document_department",
+  "document_category",
+  "document_version",
+  "document_number",
+  "document_file",
   "request",
   "action",
   "user",
@@ -17,11 +23,48 @@
  ],
  "fields": [
   {
+   "description": "Plain text, not a Link -- a deleted document's audit trail must never depend on that document still existing.",
    "fieldname": "document",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Document",
-   "options": "Document Library"
+   "label": "Document"
+  },
+  {
+   "description": "Snapshot of the document's title at the time of this event -- survives even if the document is later deleted.",
+   "fieldname": "document_title",
+   "fieldtype": "Data",
+   "label": "Document Title",
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_department",
+   "fieldtype": "Data",
+   "label": "Department",
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_category",
+   "fieldtype": "Data",
+   "label": "Category",
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_version",
+   "fieldtype": "Data",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_number",
+   "fieldtype": "Data",
+   "label": "Document Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "document_file",
+   "fieldtype": "Data",
+   "label": "File",
+   "read_only": 1
   },
   {
    "fieldname": "request",
@@ -61,7 +104,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-29 15:47:19.032867",
+ "modified": "2026-09-23 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "DMS",
  "name": "DMS Audit Log",

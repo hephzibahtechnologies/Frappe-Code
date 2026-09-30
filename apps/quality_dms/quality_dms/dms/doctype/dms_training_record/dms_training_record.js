@@ -84,9 +84,12 @@ frappe.ui.form.on("DMS Training Record", {
 	},
 
 	setup_my_certificate(frm) {
-		// Offer the logged-in employee their own personal certificate once the
-		// record is verified. Called by dt/dn so only read permission is needed.
-		if (frm.doc.__islocal || !["Verified", "Closed"].includes(frm.doc.status)) return;
+		// Offer the logged-in employee their own personal certificate. A manager
+		// can now verify (and certificate) one employee at a time via
+		// "Verify Employee", so this must not wait for the whole record to reach
+		// Verified/Closed -- get_my_certificate already returns null until this
+		// employee's own row actually has a certificate.
+		if (frm.doc.__islocal) return;
 		frappe.call({
 			method: "run_doc_method",
 			args: { method: "get_my_certificate", dt: frm.doctype, dn: frm.docname },
@@ -184,10 +187,51 @@ frappe.ui.form.on("DMS Training Record", {
 				frm.trigger("open_assign_dialog");
 			}, __("Actions"));
 
+			frm.add_custom_button(__("Assign by Department / Group / Company"), () => {
+				frm.trigger("open_assign_by_scope_dialog");
+			}, __("Actions"));
+
 			const suggested = (frm.doc.employees || []).filter((r) => r.status === "Suggested");
 			if (suggested.length) {
 				frm.add_custom_button(__("Assign Suggested ({0})", [suggested.length]), () => {
 					frm.trigger("open_assign_suggested_dialog");
+				}, __("Actions"));
+			}
+		}
+
+		if (is_manager && !["Closed", "Cancelled"].includes(status)) {
+			const verifiable = (frm.doc.employees || []).filter(
+				(r) => r.acknowledged && !r.employee_verified_by
+			);
+			if (verifiable.length) {
+				frm.add_custom_button(__("Verify Employee ({0})", [verifiable.length]), () => {
+					frappe.prompt(
+						[
+							{
+								label: __("Employee"),
+								fieldname: "row_name",
+								fieldtype: "Select",
+								reqd: 1,
+								options: verifiable.map((r) => ({
+									label: `${r.employee_name || r.employee} (${r.assessment_score || 0})`,
+									value: r.name,
+								})),
+							},
+							{
+								label: __("Verification Notes"),
+								fieldname: "notes",
+								fieldtype: "Text",
+							},
+						],
+						(vals) => {
+							frm.call("verify_employee", { row_name: vals.row_name, notes: vals.notes || null }).then(() => {
+								frm.reload_doc();
+								frappe.show_alert({ message: __("Employee training verified."), indicator: "green" });
+							});
+						},
+						__("Verify Employee Training"),
+						__("Verify")
+					);
 				}, __("Actions"));
 			}
 		}
@@ -539,6 +583,112 @@ frappe.ui.form.on("DMS Training Record", {
 				});
 			},
 		});
+		d.show();
+	},
+
+	open_assign_by_scope_dialog(frm) {
+		const scope_doctype = { Department: "Department", "Employee Group": "Employee Group", Company: "Company" };
+
+		const d = new frappe.ui.Dialog({
+			title: __("Assign by Department / Group / Company"),
+			fields: [
+				{
+					label: __("Scope Type"),
+					fieldname: "scope_type",
+					fieldtype: "Select",
+					options: ["Department", "Employee Group", "Company"],
+					default: "Department",
+					reqd: 1,
+				},
+				{
+					label: __("Scope Value"),
+					fieldname: "scope_value",
+					fieldtype: "Link",
+					options: "Department",
+					reqd: 1,
+				},
+				{
+					label: __("Include sub-departments"),
+					fieldname: "include_subdepartments",
+					fieldtype: "Check",
+					depends_on: "eval:doc.scope_type=='Department'",
+				},
+				{
+					label: __("Due Date"),
+					fieldname: "due_date",
+					fieldtype: "Date",
+					default: frm.doc.due_date,
+					description: __("Leave blank to inherit the training record's current due date."),
+				},
+				{ fieldtype: "Section Break" },
+				{
+					fieldname: "preview",
+					fieldtype: "HTML",
+					options: `<div class="text-muted dms-scope-preview">${__("Select a scope to see how many employees will be assigned.")}</div>`,
+				},
+			],
+			primary_action_label: __("Assign"),
+			primary_action(values) {
+				if (!values.scope_value) {
+					frappe.msgprint(__("Please select a scope value."));
+					return;
+				}
+				frappe.call({
+					method: "quality_dms.dms.doctype.dms_training_record.dms_training_record.assign_by_scope",
+					args: {
+						training_record: frm.doc.name,
+						scope_type: values.scope_type,
+						scope_value: values.scope_value,
+						due_date: values.due_date || null,
+						include_subdepartments: values.include_subdepartments ? 1 : 0,
+					},
+				}).then((r) => {
+					d.hide();
+					frm.reload_doc();
+					if (r && r.message) {
+						const { added, total, matched } = r.message;
+						frappe.show_alert({
+							message: __("{0} employee(s) assigned ({1} matched the scope). Total assigned: {2}.", [added, matched, total]),
+							indicator: "green",
+						});
+					}
+				});
+			},
+		});
+
+		const $preview = () => d.get_field("preview").$wrapper.find(".dms-scope-preview");
+
+		const update_preview = frappe.utils.debounce(() => {
+			const values = d.get_values(true);
+			if (!values.scope_type || !values.scope_value) return;
+			$preview().text(__("Checking…"));
+			frappe.call({
+				method: "quality_dms.dms.doctype.dms_training_record.dms_training_record.count_employees_for_scope",
+				args: {
+					scope_type: values.scope_type,
+					scope_value: values.scope_value,
+					include_subdepartments: values.include_subdepartments ? 1 : 0,
+				},
+			}).then((r) => {
+				const count = r.message && r.message.count;
+				if (count === 0) {
+					$preview().removeClass("text-muted").addClass("text-danger").text(__("No active employees match this scope."));
+				} else {
+					$preview().removeClass("text-danger").addClass("text-muted").text(__("{0} active employee(s) will be assigned.", [count]));
+				}
+			});
+		}, 400);
+
+		d.set_df_property("scope_type", "onchange", () => {
+			const scope_type = d.get_value("scope_type");
+			d.set_value("scope_value", "");
+			d.set_df_property("scope_value", "options", scope_doctype[scope_type] || "Department");
+			d.set_df_property("include_subdepartments", "hidden", scope_type !== "Department");
+			$preview().removeClass("text-danger").addClass("text-muted").text(__("Select a scope to see how many employees will be assigned."));
+		});
+		d.fields_dict.scope_value.df.onchange = update_preview;
+		d.fields_dict.include_subdepartments.df.onchange = update_preview;
+
 		d.show();
 	},
 });

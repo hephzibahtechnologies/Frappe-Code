@@ -6,7 +6,9 @@ Environment-aware: reads `is_production` from frappe.conf (default False).
 - Production mode: creates site, installs apps, writes Nginx conf (stubbed)
 """
 
+import hashlib
 import os
+import secrets
 import shutil
 import subprocess
 import traceback
@@ -14,6 +16,7 @@ from datetime import datetime
 
 import frappe
 from frappe import _
+from frappe.utils import random_string
 
 from sbiqc_provisioning.provisioner.seeder import seed_tenant
 
@@ -54,7 +57,12 @@ def provision_tenant(tenant_name):
 	is_production = frappe.conf.get("is_production", False)
 	site_name = tenant.site_name
 	db_root_password = frappe.conf.get("db_root_password", "root")
-	admin_password = frappe.conf.get("tenant_admin_password", "Admin@123")
+	# Generated fresh per tenant — never logged, never emailed. `bench new-site`
+	# needs a real password to seed the site's Administrator account, but the
+	# tenant admin only ever receives a one-time password-reset link (see
+	# _generate_admin_reset_link below), so this value is discarded immediately
+	# after site creation.
+	admin_password = secrets.token_urlsafe(24)
 
 	log_name = create_log(tenant_name, site_name)
 
@@ -94,6 +102,7 @@ def provision_tenant(tenant_name):
 				],
 				cwd=bench_path,
 				timeout=600,
+				secret_values=(db_root_password, admin_password),
 			)
 			update_log_step(log_name, "Site created", 25)
 		frappe.publish_progress(25, title=_("Provisioning {0}").format(site_name))
@@ -150,8 +159,10 @@ def provision_tenant(tenant_name):
 		tenant.db_set("provisioned_at", datetime.now())
 		frappe.db.commit()
 
-		# Step 7: Send welcome email (non-blocking)
-		_send_welcome_email(tenant)
+		# Step 7: Send welcome email (non-blocking) — a one-time password-reset
+		# link, never the raw password (see _generate_admin_reset_link).
+		reset_link = _generate_admin_reset_link(site_name)
+		_send_welcome_email(tenant, reset_link)
 
 		frappe.publish_progress(100, title=_("Done"))
 		complete_log(log_name)
@@ -176,7 +187,43 @@ def _update_status(tenant, status):
 	frappe.db.commit()
 
 
-def _send_welcome_email(tenant):
+def _generate_admin_reset_link(site_name):
+	"""Generate a one-time password-reset link for the new site's Administrator
+	account, so the tenant admin sets their own password instead of the raw
+	value ever being logged, emailed, or displayed.
+
+	core's whitelisted `reset_password()` explicitly refuses to act on the
+	Administrator account (see frappe/core/doctype/user/user.py), so the
+	reset key is set directly here, the same way update_password.py validates
+	it (sha256-hashed key + last_reset_password_key_generated_on timestamp).
+
+	Runs against the tenant's own site DB, then restores the original site
+	context — failure here must never crash provisioning, since the tenant
+	site is already fully set up at this point.
+	"""
+	original_site = frappe.local.site
+	try:
+		frappe.init(site=site_name)
+		frappe.connect()
+		key = random_string(32)
+		hashed_key = hashlib.sha256(key.encode()).hexdigest()
+		frappe.db.set_value("User", "Administrator", "reset_password_key", hashed_key)
+		frappe.db.set_value("User", "Administrator", "last_reset_password_key_generated_on", datetime.now())
+		frappe.db.commit()
+		is_production = frappe.conf.get("is_production", False)
+		port = "" if is_production else ":8000"
+		return f"http://{site_name}{port}/update-password?key={key}"
+	except Exception:
+		frappe.logger().warning(
+			f"Could not generate admin reset link for {site_name}: {frappe.get_traceback()}"
+		)
+		return None
+	finally:
+		frappe.init(site=original_site)
+		frappe.connect()
+
+
+def _send_welcome_email(tenant, reset_link=None):
 	"""Send a welcome email to the tenant admin after successful provisioning.
 	Email failure never raises — provisioning is already complete at this point.
 	"""
@@ -189,6 +236,30 @@ def _send_welcome_email(tenant):
 		site_url = f"http://{tenant.site_name}{port}"
 
 		subject = f"Your SBIQ instance is ready — {tenant.client_name}"
+
+		if reset_link:
+			reset_block = f"""
+    <div style="margin:20px 0;padding:14px 16px;background:#ede9fe;border-radius:6px;font-size:13px;color:#4c1d95;">
+      <strong>Set your password to log in for the first time</strong><br/>
+      This link is valid once and expires after a limited time.
+      <div style="margin-top:12px;">
+        <a href="{reset_link}" style="display:inline-block;background:#6366f1;color:#fff;
+           padding:10px 18px;border-radius:6px;font-weight:600;text-decoration:none;font-size:13px;">
+          Set Your Password
+        </a>
+      </div>
+    </div>"""
+			reset_missing_note = ""
+		else:
+			# Reset-link generation failed (see _generate_admin_reset_link) —
+			# provisioning already succeeded, so don't block on this, but be
+			# explicit rather than silently omitting how to log in.
+			reset_block = """
+    <div style="margin:20px 0;padding:14px 16px;background:#fef2f2;border-radius:6px;font-size:13px;color:#991b1b;">
+      <strong>Password setup link unavailable</strong><br/>
+      Contact your administrator to have your password reset manually.
+    </div>"""
+			reset_missing_note = " (or contact your administrator if you didn't receive a working link)"
 
 		message = f"""
 <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
@@ -212,14 +283,10 @@ def _send_welcome_email(tenant):
         <td style="padding:8px 0;">{tenant.plan or "Standard"}</td>
       </tr>
     </table>
-    <div style="margin:20px 0;padding:14px 16px;background:#ede9fe;border-radius:6px;font-size:13px;color:#4c1d95;">
-      <strong>First time logging in?</strong><br/>
-      Use the default password: <code>Admin@123</code><br/>
-      We recommend changing it immediately from <em>Settings &rarr; My Profile</em>.
-    </div>
+    {reset_block}
     <h2 style="font-size:16px;color:#374151;margin:20px 0 10px;">Getting started</h2>
     <ol style="font-size:14px;color:#374151;line-height:1.8;padding-left:18px;margin:0;">
-      <li>Log in at the site URL above</li>
+      <li>Set your password using the button above{reset_missing_note}</li>
       <li>Complete the <strong>Setup Wizard</strong> to configure your company</li>
       <li>Invite your team members from <em>Settings &rarr; Users</em></li>
     </ol>
@@ -325,7 +392,18 @@ def _redact_argv(argv):
 	return " ".join(redacted)
 
 
-def _run(argv, cwd=None, timeout=120):
+def _redact_values(text, secret_values):
+	"""Defense in depth: strip any literal secret value that might have been
+	echoed back verbatim in a subprocess's own stdout/stderr (argv redaction
+	in _redact_argv only covers the command line we constructed, not output
+	the child process chooses to print)."""
+	for value in secret_values:
+		if value:
+			text = text.replace(value, "[REDACTED]")
+	return text
+
+
+def _run(argv, cwd=None, timeout=120, secret_values=()):
 	try:
 		result = subprocess.run(
 			argv, cwd=cwd,
@@ -341,8 +419,8 @@ def _run(argv, cwd=None, timeout=120):
 	if result.returncode != 0:
 		raise RuntimeError(
 			f"Command failed (exit {result.returncode}): {_redact_argv(argv)}\n"
-			f"stdout: {result.stdout[-2000:]}\n"
-			f"stderr: {result.stderr[-2000:]}"
+			f"stdout: {_redact_values(result.stdout[-2000:], secret_values)}\n"
+			f"stderr: {_redact_values(result.stderr[-2000:], secret_values)}"
 		)
 	return result.stdout
 
@@ -391,7 +469,22 @@ def _install_app(site_name, app, bench_path):
 
 
 def _setup_local_routing(site_name):
-	"""Idempotently add 127.0.0.1 entry to both WSL /etc/hosts and Windows hosts file."""
+	"""Idempotently add 127.0.0.1 entry to both WSL /etc/hosts and Windows hosts file.
+
+	This is written for a WSL dev bench (sudo + /mnt/c/... available). In a
+	plain Docker container (no sudo, no /mnt/c) it's not just optional but
+	unnecessary — *.localhost already resolves to 127.0.0.1 in modern
+	browsers without any hosts-file entry — so skip gracefully with a
+	warning instead of crashing the whole provisioning run over a routing
+	nicety that has no effect on whether the tenant is actually usable.
+	"""
+	if not shutil.which("sudo"):
+		frappe.logger().warning(
+			f"Skipping /etc/hosts update for {site_name} — no 'sudo' in this environment "
+			"(expected outside WSL; *.localhost resolves to 127.0.0.1 automatically anyway)."
+		)
+		return
+
 	hosts_entry = f"127.0.0.1   {site_name}"
 
 	# --- WSL /etc/hosts ---
@@ -454,11 +547,29 @@ def _update_windows_hosts(site_name):
 
 def _setup_production_routing(site_name):
 	"""
-	Stub for production Nginx routing.
-	Will write Nginx server block, run nginx -t, then reload.
-	Not wired up yet — local dev only for now.
+	Production routing relies on wildcard DNS (*.sbiqc.com -> this server) plus a
+	single shared Nginx server block with a wildcard TLS cert (*.sbiqc.com) that
+	proxies every subdomain to this bench (see infra/nginx/sbiqc-wildcard.conf).
+	Because that one config already covers every possible tenant subdomain,
+	there is no per-tenant Nginx file to generate, validate, or reload here.
+
+	This function's job is instead to verify the new site is actually reachable
+	end-to-end through that existing routing layer, so a wildcard-DNS,
+	Nginx, or TLS-cert misconfiguration surfaces as a provisioning failure
+	rather than silently leaving an "Active" tenant nobody can reach.
 	"""
-	pass
+	import requests
+
+	url = f"https://{site_name}/api/method/ping"
+	try:
+		resp = requests.get(url, timeout=10)
+		resp.raise_for_status()
+	except Exception as e:
+		raise RuntimeError(
+			f"Site {site_name} was provisioned but is not reachable via the production "
+			f"routing layer ({url}): {e}. Check wildcard DNS (*.{{domain}} -> this server), "
+			f"the shared Nginx wildcard server block, and the wildcard TLS certificate."
+		) from e
 
 
 def provision_update(tenant_name, apps_to_add):

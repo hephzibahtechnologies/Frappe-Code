@@ -101,3 +101,137 @@ mercury.breadcrumbs.retarget = function () {
 	};
 	frappe.breadcrumbs.__mercury_wrapped = true;
 })();
+
+/* ------------------------------------------------------------------------
+ * White-label the About dialog.
+ *
+ * frappe/public/js/frappe/ui/toolbar/about.js hardcodes the Frappe wordmark,
+ * the "Open Source applications for the web." tagline, frappe.io / github /
+ * discuss links, a "Frappe Framework Version" row and the copyright footer.
+ * None of it is hookable, so the whole function is replaced here rather than
+ * editing the core file.
+ *
+ * The app list also showed letter tiles because render_app_icon() falls back to
+ * a letter whenever get_versions() (frappe/utils/change_log.py:117-123) finds
+ * neither add_to_apps_screen[0].logo nor app_logo_url on the app. Rather than
+ * add a hook to each of erpnext/hrms/helpdesk - core apps we do not patch - the
+ * logos are mapped here.
+ *
+ * Footer attribution reads Hephzibah Technologies, per Paul on 2026-08-20.
+ * The LICENSE files and source copyright headers in apps/frappe and
+ * apps/erpnext are untouched - that is where GPLv3 requires the notice.
+ * --------------------------------------------------------------------- */
+
+frappe.provide("mercury.about");
+
+mercury.about.BRAND = "SBIQC";
+mercury.about.TAGLINE = "Small Business Intelligent, Quality & Compliance";
+mercury.about.MARK = "/assets/mercury/images/htipl_logo.png";
+
+mercury.about.APP_LOGOS = {
+	erpnext: "/assets/mercury/images/htipl_logo.png",
+	hrms: "/assets/quality_dms/images/desktop_icons/frappe_hr.png",
+	quality_dms: "/assets/quality_dms/images/desktop_icons/sbiqc.png",
+	sbiqc_provisioning: "/assets/quality_dms/images/desktop_icons/sbiqc_provisioning.png",
+	mercury: "/assets/mercury/images/desktop_icons/mercury.png",
+	helpdesk: "/assets/helpdesk/icons/desktop_icons/solid/helpdesk.svg",
+	telephony: "/assets/mercury/images/desktop_icons/sbiqc_erp.svg",
+};
+
+(function () {
+	if (!frappe.ui || !frappe.ui.misc || frappe.ui.misc.__mercury_about) return;
+
+	// Core appends the checkout's git branch to every version, which leaks our
+	// internal branch names to customers - "(paul-update)" locally and
+	// "(staging-deployment)" on QA. Only a release line like "version-16" is
+	// meaningful to show, so everything else is dropped.
+	const RELEASE_BRANCH = /^version-\d+$/i;
+
+	const version_text = function (app) {
+		return app.branch && RELEASE_BRANCH.test(app.branch)
+			? `${app.version} (${app.branch})`
+			: app.version;
+	};
+
+	const app_icon = function (app_name, app) {
+		const logo = mercury.about.APP_LOGOS[app_name] || app.logo;
+		const letter = (app.title || app_name).charAt(0).toUpperCase();
+		if (logo) {
+			return `<img src="${frappe.utils.escape_html(logo)}" class="about-app-logo" alt="${letter}">`;
+		}
+		const palette = frappe.get_palette(app_name);
+		return `<div class="about-app-icon" style="background-color: var(${palette[0]}); color: var(${palette[1]});">${letter}</div>`;
+	};
+
+	frappe.ui.misc.about = function () {
+		if (frappe.ui.misc.about_dialog) {
+			frappe.ui.misc.about_dialog.show();
+			return;
+		}
+
+		const dialog = new frappe.ui.Dialog({ title: __("About") });
+		$(dialog.wrapper).addClass("about-dialog");
+
+		$(dialog.body).html(
+			`<div class="about-body">
+				<div class="about-frappe-section">
+					<img src="${mercury.about.MARK}" alt="${mercury.about.BRAND}"
+						class="about-frappe-wordmark" style="height:56px;width:auto;">
+					<p class="about-tagline" style="font-weight:600;letter-spacing:.02em;">
+						${__(mercury.about.BRAND)}
+					</p>
+					<p class="about-tagline">${__(mercury.about.TAGLINE)}</p>
+				</div>
+
+				<div class="about-section-label">${__("Installed Apps")}</div>
+				<div id="about-app-versions" class="about-app-list"></div>
+			</div>`
+		);
+
+		$(dialog.footer)
+			.removeClass("hide")
+			.prepend(
+				`<div class="about-footer">
+					${__("&copy; {0} {1}. All rights reserved.", [
+						new Date().getFullYear(),
+						mercury.about.BRAND,
+					])}
+					<div style="opacity:.55;font-size:11px;margin-top:2px;">
+						${__("&copy; Hephzibah Technologies Pvt. Ltd.")}
+					</div>
+				</div>`
+			);
+
+		const show_versions = function (versions) {
+			const $wrap = $("#about-app-versions").empty();
+			for (const app_name in versions) {
+				// the framework row is deliberately gone; do not list it as an app either
+				if (app_name === "frappe") continue;
+				const app = versions[app_name];
+				$(
+					`<div class="about-app-row" title="${app_name}: ${app.version}">
+						${app_icon(app_name, app)}
+						<div class="about-app-info">
+							<div class="about-app-name">${__(app.title)}</div>
+							<div class="about-app-version">${app_name}: ${version_text(app)}</div>
+						</div>
+					</div>`
+				).appendTo($wrap);
+			}
+			frappe.versions = versions;
+		};
+
+		dialog.on_page_show = function () {
+			if (frappe.versions) return show_versions(frappe.versions);
+			frappe.call({
+				method: "frappe.utils.change_log.get_versions",
+				callback: (r) => show_versions(r.message),
+			});
+		};
+
+		frappe.ui.misc.about_dialog = dialog;
+		dialog.show();
+	};
+
+	frappe.ui.misc.__mercury_about = true;
+})();

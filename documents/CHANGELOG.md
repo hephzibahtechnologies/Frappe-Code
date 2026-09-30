@@ -18,12 +18,43 @@ can roll back cleanly if a future change goes wrong.
 
 ## Current state
 
-**Latest push:** `51887868a` — "Task: exempt template tasks from the mandatory
-assignee" (2026-08-06). Everything below is pushed; nothing is local-only.
+**Latest on `paul-update`:** `5ca629a0e` — the SBIQC white-labelling / desk-icon round
+(2026-08-18 → 20). Pushed.
+
+**On staging and live on QA:** PR **#29** (merged as `5db2d3cbd`), then PR **#30**
+(ponnambalaraju, merged as `a01626d2f`) on top of it. `a01626d2f` contains `5db2d3cbd`, so
+the image built from it carries both. **Deploy to Staging #59** ran 2026-08-19 15:58 and
+succeeded — the icon, white-labelling and SBIQC Support work is live on `qa.sbiqc.com`.
+
+> ### ⚠️ NOT YET ON STAGING
+> Four commits are on **`paul-update` only** — the About-dialog round
+> (`7184eb288` → `5ca629a0e`). Not merged, not deployed.
+
+> ### The trap this round exposed: local ≠ repo
+> For most of 2026-08-18 the icon and branding work existed **only in the working tree and
+> the local database**, so the desk looked finished while the repo had nothing. PR #28 was
+> handed to the admin team in that state and deployed exactly what it contained: nothing.
+> Nobody did anything wrong. **Before asking for a deploy, run `git status` and confirm the
+> commits are on the remote** — a green desk locally proves nothing.
+
+**Previously deployed to QA:** PR **#16** (`paul-update` → `staging-deployment`, merged as
+`f1e3606`), then a **manual** Deploy to Staging run. Verified live on `qa.sbiqc.com`:
+Assign tab, real ToDo assignment, Assign To list column.
+
+> ### ⚠️ THE CI NO LONGER DEPLOYS ON PUSH
+>
+> `6a309a4a3` (ponnambalaraju) split the workflows:
+> - **`build.yml`** — runs on push to `staging-deployment` / `production`. **Build only**, pushes images to GHCR.
+> - **`deploy-staging.yml`** / **`deploy-production.yml`** — **`workflow_dispatch` only.** *"this never runs on push."*
+>
+> Merging to `staging-deployment` therefore does **not** reach the QA server. Someone
+> must run **Actions → Deploy to Staging** (tag `latest-staging`) once the build is green.
+> The deploy script runs `bench --site all migrate`, force-reimports the DMS fixtures, and
+> clears the server cache. Assets are baked into the image — no separate `bench build`.
 
 > ### ⚠️ NOTICE — two known blockers, deliberately NOT fixed
 >
-> Both were found on 2026-08-06 while answering how to fill the Task date columns.
+> Both were found on 2026-08-06 while answering how to fill the Task date columns.ok 
 > Paul tested the demo path and it works for him, so these were left alone rather
 > than changed the night before. They are **latent, not cosmetic** — each has a
 > definite trigger:
@@ -64,10 +95,194 @@ delivered. Phase 2 (Shipment Acknowledgement DocType + QR portal) not started.
 
 ---
 
+## `5ca629a0e` — SBIQC white-labelling + desktop/sidebar icons (2026-08-18 → 20) · PUSHED
+
+Started as "the ten Projects sidebar entries share one generic glyph" and turned into the
+full white-label pass. Delivered as `after_migrate` hooks in **mercury** plus a JS override,
+so erpnext is not patched — it re-asserts these records on **every** migrate (each run
+reports changes being re-applied, which is the proof the hooks are needed).
+
+**Shipped**
+
+- Ten Projects sidebar icons; `frappe` substitutes `list` when `icon` is blank
+  (`sidebar_item.js:93`). Names validated against the live lucide sprite.
+- Desk grid: erpnext nests its workspaces under one ERPNext tile via `parent_icon`, and
+  `get_desktop_icons()` drops anything with a parent — flattened, real image on all 24.
+- Favicon, page loader, login logo, window title — all were **unset**, so frappe/erpnext
+  defaults showed through. Now the HTIPL mark and "SBIQC".
+- Help dropdown "Frappe Support" → **SBIQC Support** → `https://docs.sbiqc.com`.
+- About dialog white-labelled, app icons mapped, internal branch names suppressed.
+- Login page lost both scrollbars; `mercury`/`sbiqc_provisioning` released as **1.0.0**.
+
+**Five traps, each of which cost real time — do not rediscover these**
+
+1. **`logo_url` is a plain URL and need not live in the record's own app.** Repointing a
+   standard Desktop Icon's `app` instead gets it **deleted** by migrate's orphan sweep
+   (`model/sync.py:211,250` — filters `standard=1`, requires a matching
+   `desktop_icon/<scrub>.json`). This destroyed Accounting, DMS and SBIQC Settings; they
+   were restored from their owning apps' fixtures.
+2. **The `/desk` grid renders a per-user `Desktop Layout` JSON snapshot, not the Desktop
+   Icon table.** The sidebar flyout reads the live records. Change one and the two
+   disagree — this is why the grid "ignored" every fix for hours.
+3. **Never sync `label` into that snapshot.** Folders are keyed by *label* but children
+   reference the parent by *name*, so relabelling a parent orphans every child onto the
+   root grid (~18 loose tiles).
+4. **A Folder can never show an icon.** `render_folder_thumbnail()` (`desktop.js:1057`)
+   clears `.icon-container` and rebuilds it from the children — the collage *is* the icon.
+   Accounting had to stop being a Folder.
+5. **A record's `name` is not its `label`.** "SBIQC Settings" is really the doc
+   `ERPNext Settings`. Any snapshot lookup must fall back to a label match.
+
+Also: `import_file` skips a standard record whose `modified` timestamp has not moved, so a
+workspace JSON edit silently no-ops until you bump it. Mercury2 removal is pinned to
+`LOCAL_SITES` — it deletes a Workspace and the hook runs on every site.
+
+**Rollback:** `3ef011dbc` is the last state before this round.
+
+---
+
+## `a50434f20` — delivery-acknowledgement scoping + staging round-trip (2026-08-18) · PUSHED
+
+**Design and documentation only. No application behaviour changed.**
+
+First batch of suggestions from the Alex demo: a minimal customer delivery-acknowledgement
+view, and one that works at remote sites with no connectivity. Scoped, not built.
+
+- `documents/alex_questions_delivery_ack.md` — seven questions written **for Alex**, ready
+  to send. The decisive one is *whose phone does the scanning* — if deliveries go by
+  third-party freight, it cannot be the driver's, so it falls to the customer's receiving
+  clerk, and that answer changes the entire build.
+- `workprogress_mercury.txt` §20 — the full record: Paul's answers (per-item scanning, no
+  signature, same flow online and offline, notify immediately when online), the proposed
+  architecture, and three risks flagged before anyone builds against them.
+
+**The constraint that breaks the obvious design**, recorded so nobody rediscovers it the
+hard way: *a web page cannot be opened on a device that has never loaded it.* Offline
+storage keeps a page working **after** first load; it cannot put the page on a phone that
+has never seen it. So the requirement is not "internet at the delivery" but **"internet at
+least once, ever, on that device"** — much softer, and probably satisfiable.
+
+Proposed architecture: the Stage 6 QR labels carry a **self-contained signed payload**, so
+the phone learns about the delivery *from the box* rather than from our server — a delivery
+created today can then be acknowledged by a phone that has been offline a week. The phone is
+a dumb capture device; the **server does all verification and reconciliation on sync**.
+
+Risks flagged: **iOS clears script-writable storage after ~7 days of non-use** (the most
+likely way this design loses data); device clocks are unverifiable offline, so
+`acknowledged_at` and `synced_at` must be stored separately; and Mercury is blind between
+delivery and sync, hence the proposed *"delivered, not yet acknowledged"* report.
+
+Merged `staging-deployment` (4 commits: PR #26 = our own work coming back, PR #27 DMS,
+`fb9610536` moving **Defect (Issue)** into the Projects sidebar, and a CI change that
+force-reimports the Projects/Support workspaces). **No conflicts.** Verified rather than
+assumed, because a forced workspace reimport is exactly how the aurora cards would silently
+revert: `bench migrate` clean, markers **28/28**, `mercury_desk.css` still **LAST** in
+`app_include_css` (8 of 8), Mercury sidebar still carries *Project Update*, **0** labels
+containing `(via …)`, Assign tab present with `custom_assign_to.mandatory_depends_on =
+eval:!doc.is_template`, Task `Delivered` present, both print formats still the DocType
+defaults, both Client Scripts enabled, `demo_hide` still wired.
+
+Rollback-before-this: `pre-staging-merge-7` (= `3f28f3cd3`)
+
+---
+
+## `fdc852185` … `c28b9ee95` — Alex / job 1105VS10 (2026-08-11 → 13) · **MERGED TO `staging-deployment`**
+
+**On staging since 2026-08-14** via PR #26 (merge commit `341535c95`). The earlier
+"not on staging" warning no longer applies.
+
+⚠️ **Merging did not deploy.** `deploy-staging.yml` is `workflow_dispatch` only — the
+staging *site* runs the old build until someone runs the workflow by hand.
+
+⚠️ **Assignee is now mandatory on Task.** Existing tasks on staging/QA have none and will
+fail validation the moment anyone edits one. Only the local bench was backfilled.
+
+Mercury's own two client documents, regenerated from live data for Alex's demo. Configuration
+only: print formats, Property Setters, Custom Fields, fixtures. No custom doctypes — the QR
+acknowledgement app remains Phase 2. Front-end walkthrough is in
+`web docs/mercury_phase1_stepbystep_guide2` PART 2.
+
+**Documents built**
+
+| Print Format | On | Reproduces |
+|---|---|---|
+| `Mercury Project Schedule` | Project | document **103-1105VS10** — 10 phase groups, 81 tasks, Days, Status %, all 5 progress payments and both customer hold points, General Notes, job footer |
+| `Mercury Progress Report` | Project Update | **1105VS10-PR-250623-EVP** — navy band, Project/Customer/PO block, A–F narrative, signature, attachments |
+
+Both defaulted per DocType, so the print view opens straight into them.
+
+**Data** — Company `Mercury1`, Customer `Evapco Dry Cooling Inc.`, Item `MP-640CH`,
+Project `PROJ-0006` (91 tasks = 10 groups + 81), SO `SAL-ORD-2026-00004` (draft, PO 536POR22825),
+`Mercury 1105VS10 Progress Payments` (5 milestones named exactly as the schedule prints them),
+Activity Cost `Execution` 65/95, Fiscal Years 2024-25 and 2025-26.
+
+### The bugs found along the way — all pre-existing or engine-level
+
+- **Sales Orders could not be saved at all on this branch.** `sales_order.json` in our *committed*
+  tree had lost `is_subcontracted` while `sales_order.py` still reads it unsafely at lines 230,
+  295 and 654 → `AttributeError` on every save, in the UI too, and on QA. Stage 1 of the Mercury
+  flow *is* "create a Sales Order". Audited the whole controller: 7 fields are missing from the
+  JSON, only that one is read unsafely. Restored that field alone, hidden and read-only.
+- **`custom_format = 1` is what makes a Jinja print format render.** Without it frappe silently
+  falls back to the standard field-by-field layout and reports no error (`printview.py:200`).
+- **wkhtmltopdf drew no table borders** — every border width was sub-pixel (0.5/1.2/1.6px), which
+  that engine renders as nothing at print DPI while Chrome rounds up. All widths now whole pixels.
+- **wkhtmltopdf cannot render flexbox.** The report's navy band collapsed in the PDF while the
+  preview looked correct. Rebuilt with `display: table` / `table-cell`.
+- **Arial is not installed on this bench**, so wkhtmltopdf substitutes the wider DejaVu Sans.
+  Three rounds of column-width "fixes" were measured against the wrong typeface. Re-measured the
+  real strings in the substituted font; every column now clears by 2.5–7mm.
+- **`doc.date` is a string in print context** — `.strftime()` cannot work. Built from the ISO
+  string instead.
+- **Text Editor fields come back wrapped in Quill markup** (`.ql-editor`), which carries the
+  *editor's* font — so any field edited in the UI printed in a different typeface. Neutralised
+  inside the print container, for all future edits.
+
+**Standing lesson recorded:** the browser preview and the PDF use *different engines*, so
+anything verified only in the preview is not verified.
+
+### Demo data shaped for the walkthrough
+
+Statuses re-cut so the job reads as **in flight, not finished**: 67 Completed · 1 Working
+(System Wiring, 60%, ending next week) · 13 Open with future dates · **0 Overdue** · project
+**81.3%**. Timesheets re-logged at 8h per working day — hours fell from 23,064 to 5,976 and cost
+from 1.5M to 388,440, with every Actual date still matching plan. `Project Update` moved directly
+under `Project` in the Mercury sidebar.
+
+**Known placeholders, not derivable from the client documents:** the 20% payment split, the 65/95
+labour rates, and the Sales Order rate (left at 0, document kept in draft).
+
+Rollback-before-this: `1fef86302`
+
+---
+
 ## Push history (newest first)
 
 | # | Commit | Date | Pushed | Summary |
 |---|--------|------|--------|---------|
+| 46 | `c28b9ee95` | 2026-08-13 | `paul-update` | print formats: drop flexbox — wkhtmltopdf cannot render it |
+| 45 | `81af8aa03` | 2026-08-13 | `paul-update` | progress report: edited narrative inherits the letter typography |
+| 44 | `80a72065c` | 2026-08-13 | `paul-update` | Project Update: default print format |
+| 43 | `7295e38da` | 2026-08-13 | `paul-update` | Project: default print format |
+| 42 | `3537bf6f6` | 2026-08-13 | `paul-update` | Task: drop "(via Timesheet)" from the costing labels |
+| 41 | `a60c1cfa9` | 2026-08-12 | `paul-update` | Mercury sidebar: Project Update under Project; revert the Projects sidebar change |
+| 40 | `a16b19c74` | 2026-08-12 | `paul-update` | Projects sidebar attempt + progress report polish — *sidebar part reverted by 41* |
+| 39 | `a040708c2` | 2026-08-12 | `paul-update` | schedule: size columns to the font the PDF actually uses |
+| 38 | `7210933c3` | 2026-08-12 | `paul-update` | print formats: integer border widths so wkhtmltopdf draws the table |
+| 37 | `1fb513783` | 2026-08-12 | `paul-update` | schedule: date padding and logo/title alignment |
+| 36 | `a6c836bef` | 2026-08-12 | `paul-update` | schedule: title no longer overlaps the table; wider S.No |
+| 35 | `dbc3fa6fa` | 2026-08-12 | `paul-update` | print formats: logo placement; stop task text wrapping |
+| 34 | `51db39821` | 2026-08-12 | `paul-update` | print formats: real Mercury logo, footer mark, fix the date crash |
+| 33 | `d1ecf0b05` | 2026-08-12 | `paul-update` | **Alex/1105VS10: schedule + progress report regenerated from data** |
+| 32 | `4ec20100c` | 2026-08-10 | `paul-update` | docs: Adam's scope answers, `sbiqc_provisioning` audit |
+| 31 | `fdc852185` | 2026-08-10 | `paul-update` | tasks: fix the two known blockers from §17.11 |
+| 30 | `5b3d7e6ce` | 2026-08-10 | yes | docs: open the Adam stream, add a session-start prompt |
+| 29 | `1d1854a3f` | 2026-08-06 | yes | sidebar user avatar: initial was white-on-white, made visible |
+| 28 | `4a3ec8800` | 2026-08-06 | yes | remove the square outline around avatars |
+| 27 | `323e1b85a` | 2026-08-06 | yes | list view: **actually** bold the headers and freeze them (27a was a no-op) |
+| 27a | `daf844cb0` | 2026-08-06 | yes | list view: bold + freeze — *no-op, superseded by 27* |
+| 26 | `5088c7186` | 2026-08-06 | yes | merge `staging-deployment` into `paul-update` (CI build/deploy split) — tag `pre-staging-merge-3` |
+| 25 | `9883806eb` | 2026-08-06 | yes | docs: the two known blockers as a standing notice |
 | 24 | `51887868a` | 2026-08-06 | yes | Task: exempt template tasks from the mandatory assignee |
 | 23 | `b8d5110cc` | 2026-08-06 | yes | docs: log the Project/Task UI round in `workprogress_mercury.txt` §17 |
 | 22 | `6bfd4f123` | 2026-08-06 | yes | revert the DMS drift fix (files **and** DB) at the user's request |
@@ -115,6 +330,41 @@ app as additive overrides and no frappe/erpnext/hrms file is patched.
 Rollback-before-this: `3db8740fd`
 
 ## Features by commit
+
+### `daf844cb0` … `1d1854a3f` — list-view polish (2026-08-06) · PUSHED
+
+Bold + frozen column headers, and two avatar defects. All in `mercury_desk.css`
+(`?v=23`). Detail in `workprogress_mercury.txt` §17.12.
+
+| Symptom | Root cause |
+|---|---|
+| Headers not bold after the first attempt | they were **already** 600 — `quality_dms.css:575` sets it at **(0,3,1)** and a bare `.list-row-head .list-row-col` is (0,2,0). They read light because they're 11px uppercase grey, not because of weight. Now 700 + `var(--text-color)` |
+| Header didn't freeze after the first attempt | `list.scss:592-598` makes `.result-container` a scroll container (`overflow-x: auto`), so sticky resolved against it — and it only scrolls *horizontally*. **Third occurrence of the overflow/sticky trap.** Fixed by giving that container its own vertical scroll and pinning at `top: 0` inside it |
+| Square outline around avatars | `quality_dms.css:924-927` rings them with `box-shadow`; a spread follows the element's own `border-radius`, and frappe rounds only the inner pieces — so it drew a square around a circle |
+| Sidebar avatar initial invisible | `quality_dms.css:125-129` paints `.body-sidebar-bottom *` for a navy background, but the avatar sits on its own light circle → white on white. **An external `!important` outranks a non-important inline style**, which is why frappe's inline avatar colour lost |
+
+Rollback-before-this: `5088c7186`
+
+### First QA deploy of this work
+
+PR **#16** merged as `f1e3606`, then a manual Deploy to Staging. Two QA-only symptoms,
+**neither caused by our changes**:
+
+1. **Assign To column blank on QA** — browser cache. The form showed the value and the
+   ToDo existed; only the list was stale. The deploy clears the *server* cache, not the
+   browser's doctype meta. `Ctrl+Shift+R` fixed it.
+2. **No quick-entry popup on QA** — QA-side setting. `quick_entry.js:79-86` builds the
+   dialog from `reqd || allow_in_quick_entry`; our field is `reqd=0 / allow=0`, so it is
+   invisible to that logic (verified locally: `Task.quick_entry = 1`, dialog fields are
+   exactly subject/project/is_template). `is_quick_entry()` only bails on
+   `quick_entry != 1`, a mandatory child table, or no eligible fields — so QA's Task has
+   **`quick_entry = 0`**. Fix there: Customize Form → Task → tick *Allow Quick Entry*.
+
+**⚠️ OPEN — QA / production backfill.** `custom_assign_to` is mandatory on real Tasks, but
+only this bench's 9 Tasks were backfilled. Every other environment still holds Tasks with
+no assignee, which will **refuse to save on first edit**. Offered but not built: an
+`after_migrate` hook in mercury so any environment self-heals on deploy. Decide before
+anyone edits an old Task on QA or production.
 
 ### `7c748dc33` … `51887868a` — Project/Task module UI round (2026-08-06) · PUSHED
 

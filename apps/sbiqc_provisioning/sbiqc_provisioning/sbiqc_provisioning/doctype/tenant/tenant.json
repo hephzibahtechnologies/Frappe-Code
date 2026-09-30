@@ -70,7 +70,9 @@
       "fieldname": "admin_email",
       "fieldtype": "Data",
       "label": "Admin Email",
-      "options": "Email"
+      "options": "Email",
+      "reqd": 1,
+      "description": "Required — this is the only way the tenant admin receives their password-reset link."
     },
     {
       "fieldname": "column_break_1",
@@ -126,7 +128,7 @@
   ],
   "index_web_pages_for_search": 0,
   "links": [],
-  "modified": "2026-06-12 12:00:00.000000",
+  "modified": "2026-08-07 00:00:00.000000",
   "modified_by": "Administrator",
   "module": "SBIQC Provisioning",
   "name": "Tenant",

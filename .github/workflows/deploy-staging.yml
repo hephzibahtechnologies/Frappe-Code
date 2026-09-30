@@ -64,8 +64,8 @@ jobs:
             echo "=== Running bench migrate (schema/patches — do NOT skip, do NOT run manually on the server) ==="
             sudo docker exec crm-backend-1 bench --site all migrate
 
-            echo "=== Force-reimporting DMS Workspace/Number Card/Dashboard Chart/Sidebar fixtures ==="
-            echo "=== (bench migrate does NOT overwrite these once they exist in the DB — see quality_dms dashboard incident 2026-07-28) ==="
+            echo "=== Force-reimporting DMS + ERPNext Projects/Support Workspace/Number Card/Dashboard Chart/Sidebar fixtures ==="
+            echo "=== (bench migrate skips these if the DB record's modified timestamp is >= the file's — a UI edit or prior now()-stamp makes it no-op; force=True below bypasses that. See quality_dms dashboard incident 2026-07-28 and the Defect-in-Projects fix.) ==="
             for f in \
               apps/quality_dms/quality_dms/dms/workspace/dms/dms.json \
               apps/quality_dms/quality_dms/dms/number_card/pending_revision_requests/pending_revision_requests.json \
@@ -79,6 +79,8 @@ jobs:
               apps/quality_dms/quality_dms/dms/dashboard_chart/training_compliance_by_department/training_compliance_by_department.json \
               apps/quality_dms/quality_dms/dms/dashboard_chart/documents_by_status/documents_by_status.json \
               apps/quality_dms/quality_dms/workspace_sidebar/dms.json \
+              apps/erpnext/erpnext/projects/workspace/projects/projects.json \
+              apps/erpnext/erpnext/support/workspace/support/support.json \
             ; do
               full="/home/frappe/frappe-bench/${f}"
               echo "--- reimporting ${full} ---"

@@ -1,12 +1,122 @@
 ================================================================================
-  MERCURY ERP DEMO — WORK PROGRESS LOG
-  Client: Mercury (Engineer-to-Order manufacturer)
+  SBIQC / ERP — WORK PROGRESS LOG
+  ACTIVE:  Adam — "Namibia Constructions" (Project + CRM)      -> section [18]
+  PAUSED:  Mercury (Engineer-to-Order manufacturer)            -> sections [1]-[17]
   Platform: ERPNext v16 / Frappe v16 (erpnext 16.23.1, frappe 16.23.0)
   Site: mysite.local | Login: Administrator | Started: 2026-07-23
 ================================================================================
 
 ################################################################################
+## >>> START HERE — COPY THIS WHOLE BLOCK INTO A NEW CHAT (updated 2026-08-10) <<<
+################################################################################
+Everything between the ▎ marks is the prompt. Paste it as your first message in a
+fresh session; it is written to be self-contained so the new chat does not have to
+re-read this whole file.
+
+▎ SBIQC / Frappe bench — ERPNext v16 · Frappe v16 · site mysite.local · login Administrator
+▎ Bench: \\wsl.localhost\Ubuntu-22.04\home\paul\frappe-bench
+▎
+▎ ══ CURRENT FOCUS ══
+▎ Client ADAM — "Namibia Constructions". The Project/Task demo was delivered and he
+▎ liked it. He now wants to explore TWO modules only:
+▎     1. SBIQC Project module  (= ERPNext Projects)
+▎     2. SBIQC CRM             (= ERPNext/Frappe CRM)
+▎ We white-label Frappe/ERPNext as SBIQC, so all client-facing naming is SBIQC.
+▎ *** MERCURY IS PAUSED. Do not touch Mercury work until Paul says "ok, back to
+▎ Mercury". Mercury's own state is in [17.11] and sections [12]-[17] of
+▎ workprogress_mercury.txt - read only if he reopens it. ***
+▎
+▎ ══ READ FIRST (in this order) ══
+▎  1. CLAUDE.md at the repo root — the PROTECTED UI FIXES section is binding.
+▎  2. workprogress_mercury.txt [18] — the Adam engagement, and what is still unknown.
+▎  3. documents/CHANGELOG.md — commit IDs, push history, rollback targets.
+▎  4. documents/PROJECT_UI_CHANGES.md — ONLY if anything UI/CSS comes up.
+▎     §4 is the verification checklist, §5 the re-apply guide.
+▎
+▎ ══ GIT ══
+▎ Remote "hephzibah" = github.com/hephzibahtechnologies/Frappe-Code · branch paul-update.
+▎ ("origin" = Lijishwilson-HTIPL is DEPRECATED — never push there.)
+▎ As of 2026-08-10: local == remote == 1fef86302, NOTHING unpushed, and all of it is
+▎ already merged into staging-deployment.
+▎ - Paul Sahaya Doss is the SOLE author. NEVER add a Claude/Anthropic co-author trailer.
+▎ - Commit locally after each step. PUSH only when he says so. Credentials are stored,
+▎   so a push succeeds silently — which is exactly why you must not push unasked.
+▎ - Multi-line commit messages: write a temp file and `git commit -F file`. Heredocs
+▎   break through the WSL bridge.
+▎ - To reach QA: PR from paul-update -> staging-deployment. ALWAYS merge
+▎   staging-deployment INTO paul-update first, verify, push, then raise the PR - that
+▎   keeps it a fast-forward. Tag the pre-merge state (pre-staging-merge-N).
+▎ - `gh` is NOT installed and sudo is unavailable, so Claude cannot open the PR.
+▎   Give Paul the compare link and write the PR body to a file for him to paste.
+▎
+▎ ══ DEPLOYMENT — THE CI DOES NOT DEPLOY ON PUSH ══
+▎ build.yml runs on push to staging-deployment/production and ONLY builds images.
+▎ deploy-staging.yml / deploy-production.yml are workflow_dispatch ONLY.
+▎ So merging to staging-deployment does NOT reach QA (qa.sbiqc.com). Someone must run
+▎ Actions -> Deploy to Staging (tag latest-staging) after the build goes green. That
+▎ script runs `bench --site all migrate`, force-reimports the DMS fixtures, and clears
+▎ the SERVER cache — the BROWSER still needs Ctrl+Shift+R.
+▎
+▎ ══ ENVIRONMENT — THIS BITES EVERY SESSION ══
+▎ - The bench is in WSL; the Bash tool is Windows Git Bash. Prefix everything:
+▎       wsl -d Ubuntu-22.04 -- bash -c "cd ~/frappe-bench && <command>"
+▎ - $(...), $((...)) and heredocs break through that bridge — they fail silently or
+▎   mangle. Write script files with the Write tool to
+▎   \\wsl.localhost\Ubuntu-22.04\tmp\x.py and run them. Prefer double quotes outside.
+▎ - Python against the site (never `bench console`, it is interactive):
+▎       cd ~/frappe-bench/sites && ../env/bin/python /tmp/script.py
+▎   with frappe.init(site="mysite.local"); frappe.connect()
+▎ - PDF generation must run under honcho:
+▎       cd ~/frappe-bench && honcho run bash -c "cd sites && ../env/bin/python ..."
+▎ - `bench restart` does NOT reload .env — only a full Ctrl+C + `bench start` does.
+▎ - After editing mercury CSS/JS: bump the ?v= in mercury/hooks.py, then
+▎   `bench build --app mercury` and `bench --site mysite.local clear-cache`.
+▎ - python-pptx is installed in env/ (used for the client deck).
+▎
+▎ ══ STANDING RULES ══
+▎ - v16 ONLY. Verify against apps/ source or docs.frappe.io BEFORE stating where a
+▎   field/button/setting lives. No trial-and-error, no v15 guessing.
+▎ - DEMOS RUN ON QA, NOT LOCAL. Every change must survive a fresh `bench migrate` on
+▎   another machine: fixtures or source files, never DB-only edits. Master-data VALUES
+▎   (holiday lists, company checkboxes) are NOT fixtures — flag them as manual steps.
+▎ - Any DocType/config change -> export to mercury fixtures and commit. JSON is the
+▎   source of truth, not the database.
+▎ - Never patch frappe/erpnext/hrms core. Our overrides live in apps/mercury/
+▎   (mercury_desk.css / mercury_desk.js, loaded LAST via app_include_css/js).
+▎ - For UI/CSS: MEASURE the rendered page — ask Paul for a DevTools Computed/Styles
+▎   reading. Three apps override the same properties with !important; reading .scss
+▎   alone has produced wrong diagnoses three times, and cost real time each time.
+▎ - VERIFY BEFORE WARNING, and verify before claiming a fix works. Several "fixes"
+▎   this project were silent no-ops (see [17.12]). Prove it, then say it.
+▎ - Prefer backend scripts over UI walk-throughs — he knows the UI and wants records
+▎   created, not a tutorial.
+▎
+▎ ══ WHAT IS ALREADY BUILT (do NOT rebuild) ══
+▎ Task module: "Assign" tab (mandatory assignee, exempt for templates and for
+▎ Project-Template-generated tasks), actual-date labels cleaned, Delivered status
+▎ gated per company, list-view bold + frozen headers, breadcrumb retargeting,
+▎ Projects workspace "Light Aurora" cards, avatar fixes. Details: [17].
+▎ Verify nothing regressed with:  env/bin/python documents/verify_ui_markers.py
+▎ (28 checks — it must print ALL CHECKS PASSED before you push anything.)
+▎
+▎ ══ OPEN ITEMS ══
+▎  [ ] Adam's scope is NOT yet defined — see [18]. ASK, do not guess.
+▎  [ ] QA/production Task backfill: custom_assign_to is mandatory, but only the local
+▎      bench's tasks were backfilled. Old tasks elsewhere refuse to save on first edit.
+▎      An after_migrate hook in mercury would self-heal every environment — offered,
+▎      not built.
+▎  [x] Two Mercury blockers — BOTH FIXED 2026-08-10, see [17.11]. Blocker 1 was
+▎      master data (PROJ-0001 Expected End Date): re-apply BY HAND on QA/any other
+▎      environment, it does not travel. Blocker 2 was code and does travel.
+▎  [ ] Same area, NOT fixed: timesheet.py:178-181 still overwrites a Delivered
+▎      status on Timesheet submit. Different code path — [17.11].
+▎  [ ] Nine quality_dms records whose JSON never reaches any DB — [17.8]. James's call.
+################################################################################
+
+################################################################################
 ## >>> HANDOFF FOR NEXT CHAT (read this WHOLE block first) — updated 2026-08-05 (evening) <<<
+##     SUPERSEDED for day-to-day work by the START HERE block above. Kept because
+##     it carries the Mercury demo detail, which is still accurate for [12]-[17].
 ################################################################################
 You are picking up the Mercury ERP demo mid-project. Read this block, then
 "web docs/mercury_phase1_stepbystep_guide.txt" (Stage 6 was REWRITTEN 2026-08-04)
@@ -899,15 +1009,283 @@ Verified server-side: template+no assignee saves · normal+no assignee rejected 
 normal+assignee saves and still creates the ToDo · template flipped to normal
 with no assignee rejected. 9 real Tasks unaffected.
 
-================================================================================
-[17.11] *** NOTICE — TWO KNOWN BLOCKERS, LEFT UNFIXED ON PURPOSE ***
-================================================================================
-Found 2026-08-06 while answering how to populate the Task date columns. Paul
-tested the demo path, it works for him, and he decided NOT to change these the
-night before the demo. That is a deliberate call, not an oversight.
+17.12 LIST-VIEW POLISH — headers, avatars                    [daf844cb0 ->
+                                                              1d1854a3f]
+--------------------------------------------------------------------------------
+(a) BOLD HEADERS + FROZEN HEADER ROW. First attempt [daf844cb0] was a DOUBLE
+    NO-OP; both halves are worth remembering:
+      - `font-weight: 600` changed nothing. quality_dms.css:575 ALREADY sets 600
+        on `body.dms-theme .list-row-head .list-row-col` at (0,3,1); a bare
+        `.list-row-head .list-row-col` is (0,2,0) and loses. The headers read
+        light because they are 11px uppercase letter-spaced grey, NOT because of
+        weight. Fixed with 700 + var(--text-color) at a winning specificity.
+      - `top: var(--page-head-height)` changed nothing. list.scss:592-598 sets
+        `.list-view .frappe-list .result-container { overflow-x: auto }`, which
+        makes that element a SCROLL CONTAINER. position:sticky resolves against
+        it, and it only scrolls HORIZONTALLY - so `top` had nothing to act on.
+        *** THIS IS THE SAME TRAP AS THE FORM TAB BAR, THIRD OCCURRENCE. Any
+        ancestor with overflow on EITHER axis silently re-parents a sticky
+        element. Check the overflow chain FIRST next time. ***
+    Real fix [323e1b85a]: give .result-container its own vertical scroll
+    (max-height: calc(100vh - 250px)) and pin the header at top:0 INSIDE it.
+    Horizontal scroll still works and the header now travels sideways with the
+    columns. Its scrollbar is deliberately re-exposed - the block further up
+    hides every scrollbar inside .page-container, and an invisible inner scroller
+    reads as a broken page. core's `.result { overflow-y: hidden }` is cleared so
+    rows are not clipped. THE 250px IS A MAGIC NUMBER (navbar + page head +
+    filter row + paging) - it is the knob if the list is too short/tall.
 
-DO NOT fix them unprompted. Offer, then wait. They are LATENT, not cosmetic -
-each has a precise trigger, and each is a small fix when the time is right.
+(b) SQUARE OUTLINE AROUND AVATARS [4a3ec8800]. quality_dms.css:924-927 adds a
+    decorative ring via box-shadow. A box-shadow spread follows the element's OWN
+    border-radius, and frappe rounds only the inner pieces (.standard-image,
+    avatar.scss:155) - not every .avatar wrapper - so it painted a hard SQUARE
+    around a round avatar. Removed. To restore it as a ring instead of deleting
+    it: `border-radius: 50%` on the same elements.
+
+(c) SIDEBAR AVATAR INITIAL INVISIBLE [1d1854a3f]. quality_dms.css:125-129 paints
+    the footer for a NAVY background with
+      body.dms-theme .body-sidebar-bottom * { color: var(--dms-on-navy) !important }
+    The `*` caught the avatar letter, but the avatar is NOT on navy - it sits on
+    its own light --avatar-frame-bg circle, so the "A" was white on white.
+    *** WHY FRAPPE LOST: an external !important OUTRANKS a non-important INLINE
+    style, and frappe sets the avatar colour inline. *** Restored to frappe's own
+    --avatar-frame-color token (correct in dark mode too), scoped to
+    .body-sidebar-bottom. Diagnosed from a DevTools reading Paul supplied - which
+    is exactly the workflow CLAUDE.md asks for on CSS problems.
+
+Asset version after this round: mercury_desk.css ?v=23.
+
+17.13 FIRST QA DEPLOY OF THIS WORK — what differed, and why
+--------------------------------------------------------------------------------
+Merged staging-deployment INTO paul-update first [5088c7186], then PR #16 ->
+staging-deployment (merged as f1e3606 by HTIPL-Paul), then a MANUAL deploy.
+
+*** THE CI NO LONGER DEPLOYS ON PUSH. *** ponnambalaraju's 6a309a4a3 split it:
+  build.yml            runs on push to staging-deployment/production. BUILD ONLY.
+  deploy-staging.yml   workflow_dispatch ONLY - "this never runs on push".
+So merging to staging-deployment does NOT reach the QA server. Someone must run
+Actions -> Deploy to Staging (default tag latest-staging) after the build goes
+green. The deploy script itself runs `bench --site all migrate`, force-reimports
+the DMS fixtures (see 17.8 - the team already works around that stale-stamp bug
+there), and clears cache. Assets are baked into the image; no separate build.
+
+TWO QA-ONLY SYMPTOMS, BOTH DIAGNOSED, NEITHER OURS:
+  1. "Assign To column is empty on QA" - BROWSER CACHE. The form showed the value
+     and the ToDo existed; only the list was blank. The deploy clears the SERVER
+     cache, not the browser's doctype meta/bundle. Ctrl+Shift+R fixed it. Same
+     symptom seen locally earlier the same day, same fix. The other 33 QA tasks
+     are legitimately blank - QA was never backfilled (see below).
+  2. "No quick-entry popup when adding a Task on QA" - QA-SIDE SETTING, not our
+     field. quick_entry.js:79-86 builds the dialog from `reqd ||
+     allow_in_quick_entry`; our custom_assign_to is reqd=0/allow=0, so it is
+     invisible to that logic. Verified locally: Task.quick_entry=1 and the dialog
+     fields are exactly subject/project/is_template. is_quick_entry() (:95-107)
+     only bails on quick_entry!=1, a mandatory child table, or no eligible
+     fields - so QA's Task has quick_entry = 0. Fix on QA: Customize Form -> Task
+     -> tick "Allow Quick Entry". Check it with
+       bench --site mysite.local execute frappe.db.get_value \
+         --kwargs "{'doctype':'DocType','filters':'Task','fieldname':'quick_entry'}"
+
+[ ] OPEN - QA/PROD BACKFILL. custom_assign_to is mandatory on real Tasks, but only
+    THIS bench's 9 Tasks were backfilled. Every other environment still has Tasks
+    with no assignee, which refuse to save on first edit. Offered but not built:
+    an after_migrate hook in mercury so any environment self-heals on deploy.
+    Decide this before anyone edits old Tasks on QA or production.
+
+================================================================================
+[18] CLIENT: ADAM — "NAMIBIA CONSTRUCTIONS"  (opened 2026-08-10)
+================================================================================
+*** THIS IS THE ACTIVE WORK STREAM. Mercury is paused until Paul says otherwise. ***
+
+18.1 WHERE IT STANDS
+--------------------------------------------------------------------------------
+- Demo DELIVERED. Paul walked Adam through the Project module and the Task module
+  using the SBIQC build (ERPNext v16 white-labelled as SBIQC).
+- Outcome: Adam liked it and wants to explore further.
+- Adam's stated interest is TWO modules only:
+      1. SBIQC Project module   (ERPNext Projects)
+      2. SBIQC CRM              (ERPNext / Frappe CRM)
+  Everything else in the bench (DMS, HR, Stock, Manufacturing, Helpdesk, Accounts…)
+  is OUT of his scope as it stands.
+
+18.2 DEMO COLLATERAL BUILT FOR THIS CLIENT
+--------------------------------------------------------------------------------
+A 17-slide client walkthrough of Project + Task, written in construction language
+(phases, crews, snags, sign-off) rather than system language. Covers: what a
+Project vs a Task is, the working-calendar and project-template setup, creating a
+job, assigning owners, plan-vs-actual dates, dependencies, statuses, timesheets,
+defects, the dashboard, reports, a who-does-what rhythm, and five known gotchas.
+  - "web docs/SBIQC_Projects_Tasks_Client_Walkthrough.pptx"   (17 slides, 16:9)
+  - "web docs/SBIQC_Projects_Tasks_Client_Walkthrough.html"   (same deck, offline)
+  - Published artifact (interactive, arrow-key navigable, P prints one slide/page)
+NOTE: "web docs/" is GITIGNORED (.gitignore:26) - these files live only on this
+machine. If they matter, decide whether to track them.
+Deliberately left OUT of the client deck: the "Delivered" status (Mercury-only,
+gated per company - it would confuse a construction client).
+
+18.3 *** SCOPE — ANSWERED BY PAUL 2026-08-10 ***
+--------------------------------------------------------------------------------
+  a) DELIVERY SHAPE = SEPARATE SITE/TENANT, created through our own SBIQC
+     provisioning module. Management's expectation: subdomain "naf", so Adam gets
+     his own instance at naf.sbiqc.com.
+  b) SELECTION = from the provisioning UI. We (SBIQC super admins) tick what the
+     tenant gets. For Adam: ERPNext Project + CRM modules only.
+  c) CRM = the ERPNext CRM module (Lead/Opportunity/Customer inside the desk),
+     branded SBIQC CRM. NOT the standalone Frappe CRM app. => do NOT tick the
+     `crm` app in the provisioning wizard.
+  d) BRANDING = full SBIQC branding.
+  e) DATA = clean site. Adam enters his own data.
+  f) USERS/ROLES = Adam gets an administrator-level role and manages his own
+     users. So his instance needs user management + role management alongside
+     Project and CRM.
+
+The original questions are kept below for the reasoning behind each.
+--------------------------------------------------------------------------------
+
+  a) DELIVERY SHAPE. A separate SITE/tenant for Adam, or the existing site with his
+     modules scoped by role? This decides almost everything downstream.
+  b) HIDE vs REMOVE. Should the other modules be invisible in the UI (workspaces,
+     sidebar, Desktop Icons, role permissions) or genuinely not installed? v16's
+     navigation is Desktop Icon + Workspace Sidebar driven - see [13]/[16] for how
+     those behave and how they are exported.
+  c) CRM - WHICH ONE? Frappe has TWO: the ERPNext CRM module (Lead/Opportunity/
+     Customer inside the desk) and the separate Frappe CRM app (its own UI at /crm).
+     This bench has a `crm` app AND a `crm_unify` app installed. Establish which
+     product Adam saw and which he wants BEFORE any work starts.
+  d) BRANDING DEPTH. Logo/name swap only, or navbar, login page, emails, print
+     formats and the app switcher too? sbiqc_provisioning already exists in this
+     bench and may already cover part of this.
+  e) DATA. Does Adam get a clean site, sample construction data, or a migration of
+     something he already has?
+  f) USERS AND ROLES. How many, and what should a site engineer see versus a PM
+     versus Adam himself?
+
+18.4 THINGS ALREADY TRUE THAT AFFECT HIS BUILD
+--------------------------------------------------------------------------------
+- The Task "Assign" tab makes an assignee MANDATORY on every real task. On a fresh
+  site that is fine. On any site with existing tasks it needs the backfill (see the
+  open item in the START HERE block) or old tasks refuse to save on first edit.
+- Project Templates + a Holiday List are the backbone of the construction workflow
+  we demoed - both are MASTER DATA, not fixtures, so they must be created on
+  whatever environment Adam uses. They will not arrive via `bench migrate`.
+- A Project's Expected End Date acts as a hard ceiling on every task date and every
+  timesheet in that project ([17.1] blocker 1). On a real client build, set it
+  generously or the site team will be blocked.
+- The desk UI overrides in apps/mercury (aurora cards, frozen list headers,
+  breadcrumbs, avatars) are currently DESK-WIDE, not scoped to one client. If Adam
+  gets his own site this is moot; if he shares this one, decide whether the Mercury
+  styling should follow him.
+  => SETTLED by 18.3(a): Adam gets his OWN SITE, so this is moot. Mercury styling
+     does not follow him; apps/mercury is not installed on his tenant.
+
+18.5 AUDIT OF THE EXISTING sbiqc_provisioning APP  (read 2026-08-10, code only)
+--------------------------------------------------------------------------------
+Written by Lijish. Never used: zero Tenant records, zero Provisioning Log records
+on this bench. Treat every path below as UNTESTED, not as working.
+
+WHAT EXISTS AND IS REAL
+  - Doctypes: Tenant (submittable), Tenant App (child), Provisioning Log,
+    MFT License (a 6-line stub, no logic - leftover).
+  - Desk Page `sbiqc-provisioning` = a Vue "Management Console" (988-line SFC):
+    Tenants / Queue / Health / Reports / Errors, plus a 3-step New Tenant wizard
+    (Identity -> Apps -> Confirm).
+  - engine.provision_tenant: bench new-site -> install apps (erpnext forced first)
+    -> seeder -> routing -> clear-cache -> status Active -> welcome email.
+    Idempotent-ish: reuses an existing site, skips installed apps, clears stale
+    install_app.lock. Passwords are redacted from subprocess error messages.
+  - Tenant.validate: subdomain regex + reserved-word list + uniqueness, and it
+    force-adds erpnext to every tenant.
+  - Everything runs async on the "long" queue via frappe.enqueue.
+
+THE FIVE THINGS THAT BLOCK ADAM
+  1. NO MODULE-LEVEL SELECTION. This is the big one. Tenant App only picks whole
+     APPS (erpnext, hrms, helpdesk, crm, quality_dms, mercury). "Project + CRM
+     only" is a selection of MODULES INSIDE erpnext. Installing erpnext installs
+     Accounts, Stock, Manufacturing, Selling, Buying, Assets, Support, the lot -
+     and nothing in this app hides or removes any of it. 18.3(b) therefore needs
+     NEW work, not configuration of what is there.
+     The v16 lever to build on: frappe/utils/modules.py:9-12 - the Administrator
+     user's `blocked_modules` child table acts as a GLOBAL block for every user on
+     a site, and frappe/desk/desktop.py:358 filters workspaces by it. So the
+     module gate is a per-tenant list of Module Defs written into the tenant
+     site's Administrator.blocked_modules, plus Desktop Icon / Workspace Sidebar
+     cleanup. NOTE: common_site_config.json on THIS bench has a `blocked_modules`
+     key (Crm Unify, FTelephony). It is INERT - grepped every app in apps/, and
+     nothing anywhere reads blocked_modules from conf; the only reader is
+     User.get_blocked_modules(), the child table. Do not copy that key pattern.
+  2. PRODUCTION ROUTING IS A STUB. engine._setup_production_routing is literally
+     `pass`. The only implemented path is local: append to WSL /etc/hosts (via
+     `sudo -n`, and sudo is not available to us) plus the Windows hosts file.
+     naf.sbiqc.com CANNOT work until this is built: nginx server block, wildcard
+     DNS for *.sbiqc.com, and TLS. This is the gap between what the code does and
+     what management is expecting.
+  3. `tenant_domain_suffix` IS NOT SET in common_site_config.json, and neither is
+     `is_production`. Tenant.validate therefore falls back to ".localhost", which
+     is why the wizard screenshot shows "naf.localhost". For naf.sbiqc.com both
+     keys must be set. `dns_multitenant` is already True - that part is fine.
+  4. NO LONG-QUEUE WORKER. The console's own Health tab reports DEGRADED / "No
+     long queue worker found". Provisioning is enqueued to the "long" queue, so
+     with no worker the job sits forever and the UI shows no error at all. Verify
+     this first - it is the most likely reason the module "looks broken".
+  5. BRANDING IS BACKWARDS FOR OUR CASE (vs 18.3(d) = full SBIQC branding).
+     seeder._set_site_branding sets the TENANT's app_name/system_name to the
+     CLIENT's name ("Adam"), not to SBIQC. whitelabel.apply_branding is the thing
+     that sets "SBIQC" and relabels the Frappe/ERPNext Desktop Icons - but it runs
+     on after_migrate of sbiqc_provisioning, and sbiqc_provisioning is in
+     Tenant.ALWAYS_EXCLUDED, so it is never installed on a tenant site and never
+     runs there. Net effect: Adam's site would say "Adam" and still show Frappe /
+     ERPNext / Frappe HR labels. Login page, logo, emails and print formats are
+     not covered by either path.
+
+ALSO WRONG / RISKY, FIX BEFORE A CLIENT TOUCHES IT
+  - The welcome email SENDS THE PASSWORD IN PLAINTEXT ("Admin@123"), and
+    engine.py defaults admin_password to that literal when `tenant_admin_password`
+    is unset. It IS set on this bench, but the fallback should not exist.
+  - `db_root_password` defaults to "root" when unset - and it IS unset here.
+  - delete_tenant runs `bench drop-site --no-backup`. Whitelisted, irreversible,
+    and the only guard is the UI.
+  - The seeder never completes the Setup Wizard, it only writes set-config keys.
+    Adam would land on the wizard - and the welcome email tells him to run it.
+    Decide: complete it programmatically, or accept it as his first step.
+  - Roles: seeder._create_admin_user only grants System Manager. That satisfies
+    18.3(f) for user/role management, but System Manager also SEES EVERYTHING,
+    which directly fights the "Project and CRM only" requirement. The module gate
+    in item 1 has to be what constrains him, not his role.
+  - The wizard offers the `crm` app. Per 18.3(c) it must NOT be ticked for Adam -
+    that is the wrong CRM product. The Confirm screenshot shows "SBIQC, crm",
+    i.e. exactly the wrong pick.
+  - common_site_config.json still has `frappe_user: ijish` from the original dev's
+    machine.
+
+================================================================================
+[17.11] *** TWO KNOWN BLOCKERS — BOTH FIXED 2026-08-10 ***
+================================================================================
+Found 2026-08-06 while answering how to populate the Task date columns. Left
+unfixed on purpose the night before the demo; Paul cleared them for fixing on
+2026-08-10 and BOTH ARE NOW DONE. The mechanism write-ups below are kept because
+they explain WHY each fix looks the way it does - do not re-fix them.
+
+  BLOCKER 1 = FIXED. PROJ-0001.expected_end_date 2026-08-03 -> 2027-12-31.
+    This is MASTER DATA, not a fixture. It does NOT travel via bench migrate -
+    any other environment running this demo needs the same edit by hand.
+    Verified: Expected Start/End Date now saves on a PROJ-0001 task
+    (TASK-2026-00006 set to 2026-08-10 / 2026-08-20 as the probe).
+  BLOCKER 2 = FIXED in code, so it DOES travel. mercury/task_status.py gains
+    TaskStatusMixin.update_status, wired via hooks.py -> extend_doctype_class.
+    It early-returns on "Delivered" and delegates everything else to erpnext via
+    super(), so the core overdue rule is untouched. NOT a doc_event: core
+    update_status writes with db_set() and never runs validate.
+    Verified by giving TASK-2026-00001 a past exp_end_date and running
+    set_tasks_as_overdue() directly: it stayed Delivered, while the control
+    task TASK-2026-00007 still flipped to Overdue. MRO confirmed as
+    ExtendedTask -> TaskStatusMixin -> Task.
+
+STILL OPEN in this area: the RELATED note at the bottom of this section.
+timesheet.py:178-181 force-sets Completed/Working on Timesheet submit and will
+still destroy a Delivered status. Blocker 2's fix does not cover it - it is a
+different code path. Not fixed, not authorised.
+
+--- original write-ups, kept for the mechanism detail ---
 
 BLOCKER 1 — PROJ-0001.expected_end_date = 2026-08-03, i.e. IN THE PAST.
   Mechanism : task.py:120-136 validate_parent_project_dates throws if ANY task
@@ -938,3 +1316,263 @@ against TASK-2026-00001.
 ================================================================================
 END — MERCURY WORK PROGRESS
 ================================================================================
+
+
+================================================================================
+[19] ALEX DEMO DELIVERED — 2026-08-13  ·  OUTCOME: WENT WELL
+================================================================================
+Paul demoed Stages 1-8 to Alex Sosa (VP Engineering, Mercury Vacuum Technologies)
+using job 1105VS10 / Evapco PO 536POR22825. Reported back: the demo went well.
+
+*** MANAGEMENT/CLIENT SUGGESTIONS FROM THE MEETING ARE NOT YET CAPTURED. ***
+Paul has them and will brief them before the next demo. Do NOT guess at them or
+start building against assumptions - ASK FOR THE LIST FIRST. Same discipline that
+was applied to the "project report" brief, which cost three sessions of guessing
+before it was finally handed over.
+
+WHAT WAS DEMOED, AND WITH WHICH RECORDS
+--------------------------------------------------------------------------------
+  Stage 1  PO Intake              SAL-ORD-2026-00002 (Connections tab = traceability)
+  Stage 2  RTM Approval           same SO + live transition on SAL-ORD-2026-00004
+  Stage 3  Procurement            MAT-MR-2026-00001 -> PUR-ORD-2026-00001 -> MAT-PRE-2026-00001
+  Stage 4  Fabrication progress   PROJ-0006 (10 groups + 81 tasks, live task add)
+  Stage 5  Inspection             MAT-QA-2026-00001 + -00003..00006
+  Stage 6  Packing + QR labels    MAT-PAC-2026-00002 -> MAT-DN-2026-00003, 7 serialised units
+  Stage 7  Milestone invoicing    ACC-SINV-2026-00067 + the 5-milestone template
+  Stage 8  Client documents       PROJ-0006 schedule + PROJ-UPD-2026-00001 progress report
+
+CUSTOMISATIONS BUILT FOR THIS DEMO (all config or apps/mercury, all in fixtures)
+--------------------------------------------------------------------------------
+  - Print Format "Mercury Project Schedule"   (Project)        = doc 103-1105VS10
+  - Print Format "Mercury Progress Report"    (Project Update) = doc 1105VS10-PR-...
+  - Both set as the DocType default print format, so the print view opens on them
+  - Task "Assign" tab: 12 Custom Fields, assignee mandatory, mirrored to a real ToDo
+  - Task "Delivered" status, gated per company by a server hook
+  - "(via Timesheet)" and every other "(via ...)" suffix stripped from Task and
+    Project labels (10 + 1 Property Setters)
+  - Sales Order RTM workflow shown as a stepper in the page head (Client Script)
+  - List view: bold + frozen column headers, % Progress header fix, avatar fixes
+  - Projects workspace "Light Aurora" cards
+  - Project Update lifted directly under Project in the Mercury sidebar
+  - demo_hide.py: hides PROJ-0002/0004/0005 from queries WITHOUT deleting them
+
+STILL OPEN / KNOWN PLACEHOLDERS - say these out loud, do not let them pass as real
+--------------------------------------------------------------------------------
+  [ ] Payment split is 20% x 5. The real percentages are in Alex's contract and are
+      in NONE of the four client documents.
+  [ ] Labour rates 65 costing / 95 billing are ours, not Mercury's.
+  [ ] SAL-ORD-2026-00004 sits at rate 0 and is DRAFT - the contract value is unknown.
+  [ ] Freight-box split not built: the packing slip packs everything as case 1
+      because 1105VS10-PL3 is "box 3 of 3" and we do not have the box breakdown.
+  [ ] Customer Inspection Notice (QCF 10.409) not built - Phase 2.
+  [ ] Customer does NOT approve in the system. The RTM workflow is Mercury staff
+      recording an email conversation. Portal/email approval is Phase 2.
+  [ ] Incoming QI has no counterpart in Alex's process - agreed to remap quality to
+      the ITP hold points, NOT yet done.
+
+
+================================================================================
+[20] POST-DEMO ROUND 1 — DELIVERY ACKNOWLEDGEMENT (design only, NOTHING BUILT)
+================================================================================
+GIT STATE AT THE TIME OF WRITING
+--------------------------------------------------------------------------------
+  PR #26 merged into staging-deployment on 2026-08-14 (merge commit 341535c95).
+  All demo work is ON STAGING. 0 commits waiting. Verified from the bench, not
+  just from the PR page.
+  NOTE: merging does NOT deploy. deploy-staging.yml is workflow_dispatch only,
+  so the staging SITE still runs the old build until someone runs it manually.
+
+  *** BEFORE ANY NEW WORK: pull. staging moved ahead by the merge commit. ***
+      git fetch hephzibah
+      git merge hephzibah/staging-deployment      (on paul-update)
+  Paul is doing this in a separate chat.
+
+FIRST SUGGESTIONS FROM THE ALEX MEETING (there are MORE - not yet given)
+--------------------------------------------------------------------------------
+Alex raised the gap after Stage 6: the system ends at Mercury's shipping dock
+and knows nothing about what happens at the customer site. He asked for:
+  1. A customer delivery-acknowledgement view - minimal, 2-3 clicks
+  2. That same acknowledgement to work at remote sites with NO connectivity
+
+PAUL'S ANSWERS TO THE SCOPING QUESTIONS (2026-08-14)
+--------------------------------------------------------------------------------
+  - Carrier: not confirmed, but Paul's bet (and mine) is THIRD-PARTY FREIGHT,
+    not Mercury's own truck. Paul is confirming with Alex.
+  - Remote sites: NO signal and NO wifi. Genuinely disconnected, not just no wifi.
+  - Granularity: PER-ITEM. Each unit scanned and ticked. Click count is NOT a
+    hard constraint after all - "in online all the individual items scanned and
+    verified, clicks dont matter".
+  - NO SIGNATURE. The scans are the evidence. Online and offline must feel like
+    the same flow.
+  - Notifications: ONLINE = notify at the moment. OFFLINE = updating the
+    Delivery Note when it syncs is enough.
+
+THE CONSTRAINT THAT BREAKS THE OBVIOUS DESIGN
+--------------------------------------------------------------------------------
+  A web page cannot be opened on a device that has NEVER loaded it. Local
+  storage keeps a page working AFTER first load; it cannot put the page on a
+  phone that has never seen it.
+
+  So the real requirement is NOT "internet at the delivery". It is:
+      INTERNET AT LEAST ONCE, EVER, ON THAT DEVICE.
+  That is a much softer requirement and probably satisfiable (town trip, site
+  office satellite, setup before travelling out).
+
+  Consequence: if it IS third-party freight, the app cannot live on the driver's
+  phone, so it must be the CUSTOMER's receiving clerk's phone. That is the open
+  question that decides the whole build.
+
+AGREED ARCHITECTURE (design only - approved by nobody yet)
+--------------------------------------------------------------------------------
+  The offline app does NOT pre-load deliveries. That design fails immediately:
+  a DN created today cannot reach a phone that has been offline a week.
+
+  Instead the QR labels from Stage 6 carry a self-contained SIGNED payload
+  (serial + DN + PO + item). The phone learns about the delivery FROM THE BOX,
+  not from our server.
+
+      phone = dumb capture device. Scans, timestamps, queues locally.
+      server = does ALL verification and reconciliation on sync.
+                7 of 7 -> acknowledged
+                6 of 7 -> flag the short
+                unknown serial -> flag it
+
+  The phone never has to be right about anything. That is what makes it robust.
+  Same flow online and offline; online just syncs instantly and fires the alert.
+
+THREE RISKS FLAGGED UP FRONT
+--------------------------------------------------------------------------------
+  1. iOS WIPES OFFLINE STORAGE after ~7 days of non-use (Safari's cap on
+     script-writable storage). A phone that captures a delivery then sits in a
+     drawer at a remote site CAN LOSE THE ACKNOWLEDGEMENT BEFORE IT SYNCS.
+     Home-screen install exempts it but has historically been buggy.
+     THIS IS THE MOST LIKELY WAY THIS DESIGN LOSES DATA.
+  2. Device clocks are unverifiable offline. Store acknowledged-at (device,
+     untrusted) and synced-at (server, trusted) SEPARATELY and flag implausible
+     gaps. Matters for an ISO shop.
+  3. Mercury is blind between delivery and sync. Proposed a "delivered, not yet
+     acknowledged" report - cheap, and the thing that actually protects Alex.
+
+  Also unresolved: storing this properly wants a DELIVERY ACKNOWLEDGEMENT
+  doctype (per-item condition, damage photos, dual timestamps, audit trail).
+  Paul's standing rule was no custom doctypes; this one probably earns it, but
+  it has NOT been agreed.
+
+QUESTIONS SENT TO ALEX
+--------------------------------------------------------------------------------
+  Written up in documents/alex_questions_delivery_ack.md - whose phone, can it
+  connect once, iOS or Android, is the paper fallback acceptable, does it match
+  an existing QCF form, does he want the not-yet-acknowledged list, and is
+  per-item really needed. Awaiting his reply.
+
+RECOMMENDED PACING
+--------------------------------------------------------------------------------
+  Build the ONLINE path first and demo it - most of the value, visible quickly,
+  reuses the Stage 6 QR labels. Offline follows once Alex says whose phone it
+  is, because that answer could still send us to the paper fallback and we do
+  not want to build the wrong thing.
+
+*** ALEX RAISED OTHER THINGS IN THAT MEETING. PAUL HAS THEM AND HAS NOT GIVEN
+*** THEM YET. ASK - DO NOT GUESS. They may change this design.
+
+
+================================================================================
+[21] SBIQC WHITE-LABELLING + DESKTOP/SIDEBAR ICONS - 2026-08-18 -> 20  DONE
+================================================================================
+GIT STATE
+--------------------------------------------------------------------------------
+  PR #29 merged to staging-deployment (5db2d3cbd). PR #30 (ponnambalaraju,
+  fix/sbiqc-settings-desktop-icon) merged on TOP of it (a01626d2f), so that
+  image carries BOTH - verified with `git merge-base --is-ancestor`, not assumed.
+  Deploy to Staging #59 ran 2026-08-19 15:58 and succeeded. This work is LIVE
+  on qa.sbiqc.com.
+
+  4 commits on paul-update NOT yet merged (the About-dialog round):
+    7184eb288  white-label the About dialog + fix its app icons
+    9f5885c9b  About footer -> Hephzibah Technologies
+    86aaa49dd  stop leaking internal branch names ((paul-update)) in About
+    5ca629a0e  mercury + sbiqc_provisioning released as 1.0.0
+
+*** THE PROCESS FAILURE - READ THIS BEFORE THE NEXT DEPLOY ***
+--------------------------------------------------------------------------------
+  For most of 2026-08-18 all of this existed ONLY in the working tree and the
+  local DB. The desk looked finished locally while the repo had nothing. PR #28
+  was handed to the admin team in that state and deployed exactly what it
+  contained: nothing. The admin team did nothing wrong.
+
+  Paul reasonably assumed local == pushed. It was not.
+
+  RULE: before asking anyone to deploy, run `git status` and confirm the commits
+  are ON THE REMOTE. A working desk locally proves nothing. Commit as you go.
+
+WHAT SHIPPED
+--------------------------------------------------------------------------------
+  - 10 Projects sidebar icons (frappe substitutes "list" when icon is blank)
+  - Desk grid flattened out of erpnext's single ERPNext tile - 24 real icons
+  - favicon / page loader / login logo / window title -> HTIPL mark + "SBIQC"
+    (all four were simply UNSET, which is why frappe defaults showed through)
+  - Help dropdown "Frappe Support" -> SBIQC Support -> docs.sbiqc.com
+  - About dialog white-labelled; app icons mapped; branch names suppressed
+  - Login page: both scrollbars gone
+  - Accounting: Folder -> Link (a Folder can never show an icon)
+  - Mercury2 deleted (pinned to LOCAL_SITES - it deletes a Workspace)
+  - mercury + sbiqc_provisioning: 0.0.1 -> 1.0.0
+
+WHERE IT LIVES
+--------------------------------------------------------------------------------
+  apps/mercury/mercury/desktop_icons.py     - 5 after_migrate hooks
+  apps/mercury/mercury/public/js/mercury_desk.js - About dialog override
+  apps/sbiqc_provisioning/.../sbiqc_login.css    - login scrollbar fix
+  Nothing in frappe/erpnext/hrms EXCEPT one agreed exception: mercury.svg added
+  to erpnext/public/icons/desktop_icons/{solid,subtle}/. Approved by Paul
+  2026-08-19 because the Workspaces flyout groups by frappe.current_app, so the
+  file MUST sit in erpnext. Additive - two new files, nothing modified.
+
+FIVE TRAPS - DO NOT REDISCOVER THESE
+--------------------------------------------------------------------------------
+  1. logo_url is a PLAIN URL and need not live in the record's own app.
+     Repointing a standard Desktop Icon's `app` gets it DELETED by migrate's
+     orphan sweep (model/sync.py:211,250 - filters standard=1, requires a
+     matching desktop_icon/<scrub>.json). This destroyed Accounting, DMS and
+     SBIQC Settings before they were restored from their apps' fixtures.
+
+  2. The /desk grid renders a PER-USER "Desktop Layout" JSON snapshot, NOT the
+     Desktop Icon table. The sidebar flyout reads the live records. Change one
+     and the two disagree - this is why the grid ignored every fix for hours.
+
+  3. NEVER sync `label` into that snapshot. Folders are keyed by LABEL but
+     children reference the parent by NAME, so relabelling a parent orphans
+     every child onto the root grid (~18 loose tiles appeared).
+
+  4. A Folder can never show an icon. render_folder_thumbnail()
+     (desktop.js:1057) clears .icon-container and rebuilds it from the
+     children - the collage IS the icon.
+
+  5. A record's `name` is not its `label`. "SBIQC Settings" is really the doc
+     "ERPNext Settings". Snapshot lookups must fall back to a label match.
+
+  Bonus: import_file SKIPS a standard record whose `modified` timestamp has not
+  moved, so editing a workspace JSON silently no-ops until you bump it.
+
+DEPLOY SEQUENCE (the part that actually matters)
+--------------------------------------------------------------------------------
+  merge -> WAIT for "Build & Push Images" -> then Deploy to Staging.
+  deploy-staging.yml does NO rebuild; it pulls an existing tag. Deploying before
+  the build finishes runs the hooks and writes new asset paths into the DB while
+  the image lacks the files = BROKEN favicon and blank tiles, which is worse
+  than unchanged. If two PRs merge close together, deploy by explicit commit SHA
+  rather than latest-staging - both builds race to write that same tag.
+
+OPEN / NOT DONE
+--------------------------------------------------------------------------------
+  - quality_dms still 0.0.1 and telephony still 0.0.1. quality_dms is the
+    Quality Team's (James) and telephony is Frappe Technologies' vendored app -
+    neither is ours to renumber. Ask before touching.
+  - SBIQC / SBIQC HR / SBIQC Provisioning still letter tiles in the FLYOUT only
+    (grid is fine). They are icon_type=App and their `app` field feeds
+    check_app_permission(), so repointing it would break permissions.
+  - home.png and htipl_logo.png are byte-identical (both the star). Fine, but
+    Home has no artwork of its own.
+  - Footer attribution now reads Hephzibah Technologies. LICENSE files and
+    source copyright headers in frappe/erpnext are untouched, which is where
+    GPLv3 s5 requires the notice. Worth a legal nod before customer release.

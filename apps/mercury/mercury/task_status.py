@@ -13,6 +13,9 @@ match a future "Mercury Freight Ltd", and enabling a second company would mean a
 change instead of a click.
 
 Wired up in hooks.py -> doc_events["Task"]["validate"].
+
+This module also carries TaskStatusMixin, which stops the nightly overdue sweep from
+eating the Delivered status. See the class docstring.
 """
 
 import frappe
@@ -65,3 +68,28 @@ def is_delivered_allowed(company: str | None = None, project: str | None = None)
 	if not company and project:
 		company = frappe.db.get_value("Project", project, "company")
 	return company_allows_delivered(company)
+
+
+class TaskStatusMixin:
+	"""Keeps "Delivered" from being flipped to "Overdue" by the nightly sweep.
+
+	erpnext Task.update_status() treats only Cancelled and Completed as terminal, so
+	anything else with a past exp_end_date becomes Overdue. That list is hardcoded and
+	predates our custom status, so a Delivered task silently reverts overnight -
+	set_tasks_as_overdue() runs from erpnext/hooks.py daily_maintenance.
+
+	Mixed into the Task controller via hooks.py -> extend_doctype_class. Frappe builds
+	the extended class as (mixin, ..., base), so this update_status wins the MRO and
+	super() reaches erpnext's. Deliberately NOT a copy of the core logic: everything
+	except the extra terminal status still comes from erpnext, so upstream changes to
+	the overdue rule keep applying.
+
+	Not a doc_event: update_status() calls db_set() directly and never runs validate,
+	so there is no hook that fires on this path.
+	"""
+
+	def update_status(self):
+		if self.status == DELIVERED:
+			return
+
+		super().update_status()

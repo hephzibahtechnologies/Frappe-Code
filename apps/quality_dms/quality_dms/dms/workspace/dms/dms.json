@@ -6,12 +6,12 @@
    "label": "Documents by Status"
   },
   {
-   "chart_name": "Training Compliance by Department",
-   "label": "Training Compliance by Department"
+   "chart_name": "Documents by Department",
+   "label": "Documents by Department"
   }
  ],
- "content": "[{\"id\": \"nc_hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Key Metrics</b></span>\", \"col\": 12}}, {\"id\": \"nc1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Total Documents\", \"col\": 3}}, {\"id\": \"nc2\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Published Documents\", \"col\": 3}}, {\"id\": \"nc3\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Documents in Review\", \"col\": 3}}, {\"id\": \"nc9\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Approved Documents\", \"col\": 3}}, {\"id\": \"nc5\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Draft Documents\", \"col\": 3}}, {\"id\": \"nc6\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Obsolete Documents\", \"col\": 3}}, {\"id\": \"nc7\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Pending Revision Requests\", \"col\": 3}}, {\"id\": \"nc8\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Total Revisions\", \"col\": 3}}, {\"id\": \"sp2\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ch_hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Dashboard</b></span>\", \"col\": 12}}, {\"id\": \"ch1\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Documents by Status\", \"col\": 6}}, {\"id\": \"ch2\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Training Compliance by Department\", \"col\": 6}}, {\"id\": \"sp3\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"sc_hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Quick Access</b></span>\", \"col\": 12}}, {\"id\": \"sc1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Document Library\", \"col\": 4}}, {\"id\": \"sc2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Training\", \"col\": 4}}, {\"id\": \"sc3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Document Requests\", \"col\": 4}}, {\"id\": \"sc4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Document Revisions\", \"col\": 4}}, {\"id\": \"sc5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Training Matrix\", \"col\": 4}}, {\"id\": \"sc6\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Compliance Report\", \"col\": 4}}, {\"id\": \"sp0\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ql_hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Work Queues</b></span>\", \"col\": 12}}, {\"id\": \"ql1\", \"type\": \"quick_list\", \"data\": {\"quick_list_name\": \"My Pending Trainings\", \"col\": 6}}, {\"id\": \"ql2\", \"type\": \"quick_list\", \"data\": {\"quick_list_name\": \"Pending Document Requests\", \"col\": 6}}, {\"id\": \"sp1\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"cd_hdr\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Browse</b></span>\", \"col\": 12}}, {\"id\": \"cd1\", \"type\": \"card\", \"data\": {\"card_name\": \"Documents\", \"col\": 4}}, {\"id\": \"cd2\", \"type\": \"card\", \"data\": {\"card_name\": \"Training\", \"col\": 4}}, {\"id\": \"cd3\", \"type\": \"card\", \"data\": {\"card_name\": \"Masters\", \"col\": 4}}, {\"id\": \"cd4\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}, {\"id\": \"cd5\", \"type\": \"card\", \"data\": {\"card_name\": \"Compliance & Logs\", \"col\": 4}}, {\"id\": \"cd6\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}]",
- "creation": "2026-07-08 13:06:26.892038",
+ "content": "[{\"id\":\"nc_hdr\",\"type\":\"header\",\"data\":{\"text\":\"<span style=\\\"font-size: 16px;\\\">Overview</span>\",\"col\":12}},{\"id\":\"nc1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total\",\"col\":3}},{\"id\":\"nc2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Published\",\"col\":3}},{\"id\":\"nc3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Review\",\"col\":3}},{\"id\":\"nc9\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Approved\",\"col\":3}},{\"id\":\"nc5\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Draft\",\"col\":3}},{\"id\":\"nc6\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Obsolete\",\"col\":3}},{\"id\":\"nc7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Revision Requests\",\"col\":3}},{\"id\":\"nc8\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Revisions\",\"col\":3}},{\"id\":\"sp2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ch_hdr\",\"type\":\"header\",\"data\":{\"text\":\"<span style=\\\"font-size: 16px;\\\">dashboard</span>\",\"col\":12}},{\"id\":\"ch1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Documents by Status\",\"col\":6}},{\"id\":\"ch2\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Documents by Department\",\"col\":6}},{\"id\":\"sp3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ql_hdr\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Work Queues</b></span>\",\"col\":12}},{\"id\":\"ql1\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"My Pending Trainings\",\"col\":6}},{\"id\":\"ql2\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Pending Document Requests\",\"col\":6}}]",
+ "creation": "2026-08-03 08:43:15.347122",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -272,41 +272,41 @@
    "type": "Link"
   }
  ],
- "modified": "2026-07-18 17:54:16.363857",
+ "modified": "2026-08-07 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "DMS",
  "name": "DMS",
  "number_cards": [
   {
-   "label": "Total Documents",
+   "label": "Total",
    "number_card_name": "Total Documents"
   },
   {
-   "label": "Published Documents",
+   "label": "Published",
    "number_card_name": "Published Documents"
   },
   {
-   "label": "Documents in Review",
+   "label": "Review",
    "number_card_name": "Documents in Review"
   },
   {
-   "label": "Approved Documents",
+   "label": "Approved",
    "number_card_name": "Approved Documents"
   },
   {
-   "label": "Draft Documents",
+   "label": "Draft",
    "number_card_name": "Draft Documents"
   },
   {
-   "label": "Obsolete Documents",
+   "label": "Obsolete",
    "number_card_name": "Obsolete Documents"
   },
   {
-   "label": "Pending Revision Requests",
+   "label": "Revision Requests",
    "number_card_name": "Pending Revision Requests"
   },
   {
-   "label": "Total Revisions",
+   "label": "Revisions",
    "number_card_name": "Total Revisions"
   }
  ],

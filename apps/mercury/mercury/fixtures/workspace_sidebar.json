@@ -74,6 +74,22 @@
     "child": 0,
     "collapsible": 1,
     "filters": null,
+    "icon": null,
+    "indent": 0,
+    "keep_closed": 0,
+    "label": "Project Update",
+    "link_to": "Project Update",
+    "link_type": "DocType",
+    "navigate_to_tab": null,
+    "route_options": null,
+    "show_arrow": 0,
+    "type": "Link",
+    "url": null
+   },
+   {
+    "child": 0,
+    "collapsible": 1,
+    "filters": null,
     "icon": "quality",
     "indent": 0,
     "keep_closed": 0,
@@ -135,7 +151,7 @@
     "url": null
    }
   ],
-  "modified": "2026-07-23 15:24:47.717030",
+  "modified": "2026-08-12 17:52:11.348459",
   "module": "Setup",
   "module_onboarding": null,
   "name": "Mercury",

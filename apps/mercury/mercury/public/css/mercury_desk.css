@@ -269,6 +269,135 @@ body {
 	border-radius: 0;
 }
 
+/* ------------------------------------------------------------------------
+ * List view: bolder column headers, and pin them while the rows scroll.
+ *
+ * Core renders the header as <header class="level list-row-head text-muted">
+ * (list_view.js:818) with no font-weight of its own, so it inherits the body
+ * weight and reads the same as the data under it.
+ *
+ * PINNING: .page-head is already sticky at top: 0 / z-index 20 (see the block
+ * above), and both live in the SAME scroller (.main-section), so the header has
+ * to stop at the head's height or it slides underneath it. Hence
+ * top: var(--page-head-height) - 48px, css_variables.scss:23 - and z-index 18,
+ * deliberately below the page head (20) and the form tab bar (19) so it can
+ * never paint over either.
+ *
+ * This only works because the overflow chain above already clears
+ * .layout-main-section and friends to `overflow: visible`. position: sticky
+ * resolves against the nearest ancestor with a scrolling box, and `overflow:
+ * hidden` counts - without that block the header would re-parent to a box that
+ * never scrolls and drift with the rows. Do not "tidy" the two apart.
+ *
+ * A background is required: sticky elements are transparent by default and the
+ * rows would show through as they pass underneath.
+ * ------------------------------------------------------------------------ */
+ * FIRST ATTEMPT FAILED, both halves - recorded so nobody repeats it:
+ *   - `font-weight: 600` did nothing. quality_dms.css:575 ALREADY sets 600 on
+ *     `body.dms-theme .list-row-head .list-row-col` at (0,3,1); a bare
+ *     `.list-row-head .list-row-col` is (0,2,0) and loses. The headers read light
+ *     because they are 11px uppercase letter-spaced grey, not because of weight.
+ *     So this needs 700 AND a darker colour, at a specificity that wins.
+ *   - `top: var(--page-head-height)` did nothing. list.scss:592-598 sets
+ *     `.list-view .frappe-list .result-container { overflow-x: auto }`, which makes
+ *     that element a SCROLL CONTAINER. Sticky resolves against it, and it only ever
+ *     scrolls horizontally, so there was no vertical scroll for `top` to act on.
+ *
+ * The fix therefore gives .result-container a vertical scroll of its own and pins
+ * the header at top: 0 INSIDE it. Horizontal scrolling is preserved (wide lists
+ * still slide sideways), and the header now travels with that horizontal scroll,
+ * which is what you want - the labels stay above their columns.
+ *
+ * The scrollbar is re-exposed here on purpose: the block further up hides every
+ * scrollbar inside .page-container, and an inner scroll area with no visible
+ * indicator reads as a broken page.
+ *
+ * MAGIC NUMBER: 250px is the chrome above and below the rows (navbar + page head +
+ * filter row + paging area). If the list ends up too short or too tall on another
+ * screen, this is the knob - measure and adjust rather than guessing. */
+.list-view .frappe-list .result-container {
+	max-height: calc(100vh - 250px);
+	overflow-y: auto;
+	scrollbar-width: thin;
+}
+
+.list-view .frappe-list .result-container::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+/* core sets overflow-y: hidden on .result (list.scss:596), which would clip the
+ * rows now that the parent is the scroller. */
+.list-view .frappe-list .result-container .result {
+	overflow-y: visible;
+}
+
+.list-view .frappe-list .result-container .list-row-head {
+	position: sticky;
+	top: 0;
+	z-index: 18;
+	background-color: var(--subtle-fg);
+}
+
+/* Beats quality_dms.css:575 (0,3,1) - hence body + .dms-theme in the selector,
+ * with a plain copy for when that theme is not applied. */
+body.dms-theme .list-row-head .list-row-col,
+body.dms-theme .list-row-head .list-subject .level-item,
+.list-row-head .list-row-col,
+.list-row-head .list-subject,
+.list-row-head .list-subject .level-item {
+	font-weight: 700;
+	color: var(--text-color);
+}
+
+/* ------------------------------------------------------------------------
+ * Square outline around avatars (list assignment chips, sidebar user).
+ *
+ * quality_dms.css:924-927 adds a decorative ring:
+ *     body.dms-theme .avatar, body.dms-theme .avatar-frame {
+ *         box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 3px rgba(47,111,178,.35); }
+ *
+ * A box-shadow spread follows the element's OWN border-radius. frappe rounds the
+ * inner pieces (.standard-image, avatar.scss:155) but not every .avatar wrapper,
+ * so on those the ring paints as a hard square around a round avatar.
+ *
+ * Removed rather than rounded, per the request. If the ring is wanted back, the
+ * one-line alternative is `border-radius: 50%` on the same elements - that makes
+ * it circular instead of deleting it.
+ *
+ * Same selector as theirs plus a plain copy; mercury_desk.css loads later, so
+ * equal specificity is enough and no !important is needed.
+ * ------------------------------------------------------------------------ */
+body.dms-theme .avatar,
+body.dms-theme .avatar-frame,
+.avatar,
+.avatar-frame {
+	box-shadow: none;
+}
+
+/* Sidebar user avatar: the initial was invisible (white on white).
+ *
+ * quality_dms.css:125-129 paints the whole sidebar footer for a NAVY background:
+ *     body.dms-theme .body-sidebar-bottom,
+ *     body.dms-theme .body-sidebar-bottom * { color: var(--dms-on-navy) !important; }
+ *
+ * The `*` catches the avatar's letter too - but the avatar is NOT on the navy
+ * background, it sits on its own light --avatar-frame-bg circle. So the "A" was
+ * painted near-white on near-white. Confirmed in DevTools: that rule wins over
+ * frappe's own inline `color: var(--dark-green-avatar-color)` on .avatar-frame,
+ * because an external !important outranks a non-important inline style.
+ *
+ * Restored to frappe's own token rather than a hardcoded colour, so it stays
+ * correct in dark mode too (avatar.scss:2 --avatar-frame-color = gray-500,
+ * :35 = gray-600 under [data-theme="dark"]). !important is unavoidable here -
+ * it is the only way to outrank theirs. */
+body.dms-theme .body-sidebar-bottom .avatar,
+body.dms-theme .body-sidebar-bottom .avatar *,
+body.dms-theme .body-sidebar-bottom .avatar-frame,
+body.dms-theme .body-sidebar-bottom .standard-image {
+	color: var(--avatar-frame-color) !important;
+}
+
 /* ========================================================================
  * "Light Aurora" board — Projects workspace only.
  *

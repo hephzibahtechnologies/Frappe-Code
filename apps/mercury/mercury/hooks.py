@@ -31,8 +31,8 @@ app_license = "mit"
 # line out reverts every one of those behaviours.
 # Bump ?v= when editing the file so browsers pick the change up (same convention
 # as hrms/quality_dms above it in the include list).
-app_include_css = "/assets/mercury/css/mercury_desk.css?v=19"
-app_include_js = "/assets/mercury/js/mercury_desk.js?v=1"
+app_include_css = "/assets/mercury/css/mercury_desk.css?v=23"
+app_include_js = "/assets/mercury/js/mercury_desk.js?v=4"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/mercury/css/mercury.css"
@@ -96,6 +96,15 @@ jinja = {
 # before_install = "mercury.install.before_install"
 # after_install = "mercury.install.after_install"
 
+after_migrate = [
+	"mercury.desktop_icons.remove_stray_icons",
+	"mercury.desktop_icons.flatten_accounting_folder",
+	"mercury.desktop_icons.apply_desktop_icon_layout",
+	"mercury.desktop_icons.sync_desktop_layouts",
+	"mercury.desktop_icons.apply_navbar_branding",
+	"mercury.desktop_icons.apply_brand_settings",
+]
+
 # Uninstallation
 # ------------
 
@@ -133,6 +142,16 @@ jinja = {
 # Permissions
 # -----------
 # Permissions evaluated in scripted ways
+
+# Demo housekeeping: keep unrelated projects off the screen without deleting them.
+# The list of hidden projects lives in mercury/demo_hide.py - empty it and clear-cache
+# to bring everything back. Nothing is deleted; these only filter queries.
+permission_query_conditions = {
+	"Project": "mercury.demo_hide.project_query",
+	"Task": "mercury.demo_hide.task_query",
+	"Project Update": "mercury.demo_hide.project_update_query",
+	"Timesheet": "mercury.demo_hide.timesheet_query",
+}
 
 # permission_query_conditions = {
 # 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
@@ -198,6 +217,16 @@ doc_events = {
 # extend_doctype_class = {
 # 	"Task": "mercury.custom.task.CustomTaskMixin"
 # }
+
+# The nightly overdue sweep (erpnext daily_maintenance -> set_tasks_as_overdue) flips
+# any task that is not Cancelled/Completed and whose exp_end_date has passed. Our
+# custom "Delivered" status is not on that hardcoded list, so it reverts to Overdue on
+# the first night after a Mercury task gets an Expected End Date. The mixin makes
+# Delivered terminal. A mixin rather than a doc_event because update_status() writes
+# with db_set() and never runs validate. See mercury/task_status.py.
+extend_doctype_class = {
+	"Task": "mercury.task_status.TaskStatusMixin",
+}
 
 # Overriding Methods
 # ------------------------------
@@ -288,6 +317,9 @@ fixtures = [
 	{"dt": "Workspace", "filters": [["name", "=", "Mercury"]]},
 	# The desk flyout menu is built from Workspace Sidebar records (one per top-level
 	# entry). This record backs the Mercury flyout entry.
+	# Only "Mercury" - our own record. Deliberately NOT the erpnext-owned "Projects"
+	# sidebar: exporting that would make mercury's copy win on every environment and
+	# silently block later erpnext changes to it.
 	{"dt": "Workspace Sidebar", "filters": [["name", "=", "Mercury"]]},
 	# The Workspaces flyout is actually rendered from Desktop Icon records (each points
 	# to a Workspace Sidebar via link_to). This Desktop Icon puts "Mercury" in the
@@ -304,7 +336,13 @@ fixtures = [
 	# Report". The logo itself is a FILE in this app's public/images (not a DB record),
 	# so it travels with git; only the HTML that references it lives in the DB.
 	{"dt": "Print Format", "filters": [["name", "like", "Mercury%"]]},
-	# Stage 7 - milestone billing schedule (30/40/30).
+	# The five progress payments named in Mercury's schedule 103-1105VS10. These are
+	# LINK targets for the rows of the template below, so - like the Quality
+	# Inspection Parameters further down - they must import FIRST or the template
+	# import fails with LinkValidationError.
+	{"dt": "Payment Term", "filters": [["name", "like", "Progress Payment:%"]]},
+	# Stage 7 - milestone billing schedules: the original 30/40/30, and the
+	# 1105VS10 five-milestone schedule taken from the client's own document.
 	{"dt": "Payment Terms Template", "filters": [["name", "like", "Mercury%"]]},
 	# Stage 5/6e - incoming (raw material) + outgoing (finished pump + accessories)
 	# QC checklists. NOTE: a template row's "specification" is a LINK to Quality

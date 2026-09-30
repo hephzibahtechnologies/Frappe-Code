@@ -24,17 +24,17 @@ RUN useradd -m -s /bin/bash frappe
 WORKDIR /home/frappe
 USER frappe
 
-# Clone Frappe-Code — single repo, all apps included (no submodules)
-RUN git clone \
-    --branch staging-deployment \
-    --depth 1 \
-    https://github.com/Lijishwilson-HTIPL/Frappe-Code.git \
-    frappe-bench
-
-# Local-only addition: quality_dms isn't in the Frappe-Code repo yet, so it's
-# copied in from the build context rather than cloned. Remove this COPY (and
-# the pip install/build lines below) if quality_dms gets added upstream later.
-COPY --chown=frappe:frappe apps/quality_dms /home/frappe/frappe-bench/apps/quality_dms
+# Build from this repo's current working tree instead of cloning a separate
+# fork (Lijishwilson-HTIPL/Frappe-Code) — that fork could silently drift out
+# of sync with hephzibahtechnologies/Frappe-Code (the one this session
+# actually pushes to), so any app added/changed here (e.g. the "mercury" app,
+# or any of quality_dms/sbiqc_provisioning's local work) previously never
+# reached the running container without a manual docker cp per file. This
+# repo's root already IS a bench checkout (apps/, sites/apps.txt, etc.), so a
+# straight copy is enough — see .dockerignore for what's excluded.
+USER root
+COPY --chown=frappe:frappe . /home/frappe/frappe-bench
+USER frappe
 
 WORKDIR /home/frappe/frappe-bench
 
@@ -48,7 +48,8 @@ RUN bench setup env && \
     env/bin/pip install -e apps/telephony && \
     env/bin/pip install -e apps/sbiqc_provisioning && \
     env/bin/pip install -e apps/quality_dms && \
-    env/bin/pip install -e apps/crm_unify
+    env/bin/pip install -e apps/crm_unify && \
+    env/bin/pip install -e apps/mercury
 
 # Install frontend dependencies for all apps
 RUN cd apps/frappe   && yarn install --frozen-lockfile && cd ../.. && \
@@ -58,7 +59,7 @@ RUN cd apps/frappe   && yarn install --frozen-lockfile && cd ../.. && \
     cd apps/helpdesk && yarn install --frozen-lockfile 2>/dev/null || true && cd ../..
 
 # Build frontend assets — compiles Vue/JS bundles for CRM, Helpdesk, etc.
-RUN bench build --app frappe --app erpnext --app crm --app hrms --app helpdesk --app telephony --app quality_dms || true
+RUN bench build --app frappe --app erpnext --app crm --app hrms --app helpdesk --app telephony --app quality_dms --app mercury || true
 
 # Regenerate Procfile with correct container paths; strip local redis entries
 # (Redis runs in separate containers — no redis-server binary needed here)

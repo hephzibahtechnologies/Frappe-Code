@@ -25,7 +25,10 @@
   "proxy_completed_by",
   "proxy_reason",
   "e_signature",
-  "certificate_file"
+  "certificate_file",
+  "employee_verified_by",
+  "employee_verified_date",
+  "employee_verification_notes"
  ],
  "fields": [
   {
@@ -158,13 +161,33 @@
    "label": "Certificate",
    "read_only": 1,
    "in_list_view": 0
+  },
+  {
+   "description": "Set by a manager who individually verifies this employee's completed training row, independently of whole-record verification.",
+   "fieldname": "employee_verified_by",
+   "fieldtype": "Link",
+   "label": "Verified By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "employee_verified_date",
+   "fieldtype": "Date",
+   "label": "Verified On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "employee_verification_notes",
+   "fieldtype": "Small Text",
+   "label": "Verification Notes",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-08 14:00:00.000000",
+ "modified": "2026-08-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "DMS",
  "name": "Document Acknowledgement",

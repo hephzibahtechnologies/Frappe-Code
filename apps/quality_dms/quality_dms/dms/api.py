@@ -1,5 +1,7 @@
 import frappe
+from frappe.model.delete_doc import check_if_doc_is_dynamically_linked, check_if_doc_is_linked
 from frappe.utils import now_datetime
+from frappe.workflow.doctype.workflow_action.workflow_action import clear_workflow_actions
 
 _ALLOWED_SIGN_DOCTYPES = {"Document Library", "DMS Training Record"}
 
@@ -108,9 +110,19 @@ def acknowledge_document(document, e_signature=None):
     return True
 
 
-def _insert_audit_log(action, document=None, request=None):
-    """Single insertion point for all DMS Audit Log entries."""
+def _insert_audit_log(action, document=None, request=None, document_snapshot=None):
+    """Single insertion point for all DMS Audit Log entries.
+
+    document_snapshot captures the document's own descriptive fields (title,
+    department, category, version, document_number, file) as plain text at
+    the time of the event -- not Links, so this row stays fully readable even
+    after the document itself is deleted (the one event this audit trail
+    exists to record, and the one moment the source document can no longer
+    answer for itself)."""
     try:
+        doc_fields = {
+            f"document_{k}": v for k, v in (document_snapshot or {}).items()
+        }
         frappe.get_doc({
             "doctype": "DMS Audit Log",
             "document": document,
@@ -119,6 +131,7 @@ def _insert_audit_log(action, document=None, request=None):
             "user": frappe.session.user,
             "timestamp": now_datetime(),
             "ip_address": getattr(frappe.local, "request_ip", ""),
+            **doc_fields,
         }).insert(ignore_permissions=True)
     except Exception:
         frappe.log_error(frappe.get_traceback(), "DMS: Failed to write audit log")
@@ -139,7 +152,76 @@ def log_audit_event(doc, method):
     else:
         action = "Updated"
 
-    _insert_audit_log(action=action, document=doc.name)
+    # Captured from the live doc on every event (cheap, always available) so
+    # the snapshot is already in place well before a later deletion, rather
+    # than something that only gets populated specially for on_trash.
+    snapshot = {
+        "title": doc.title,
+        "department": doc.department,
+        "category": doc.category,
+        "version": doc.version,
+        "number": doc.document_number,
+        "file": doc.file,
+    }
+
+    _insert_audit_log(action=action, document=doc.name, document_snapshot=snapshot)
+
+
+@frappe.whitelist()
+def force_delete_document(document_name):
+    """Admin-only escape hatch: delete a Document Library record at any
+    workflow stage, including Published. Frappe core refuses to hard-delete
+    a docstatus=1 record, and this doctype's workflow only offers "Mark as
+    Obsolete"/"Archive" from Published -- no path back to a cancellable
+    state -- so a plain Cancel-then-Delete is not reachable from the UI.
+    This bypasses only that workflow-stage restriction; real link
+    dependencies from other documents are still enforced, and the deletion
+    is still explicitly audited (see log_audit_event's on_trash path, which
+    this does not rely on -- the audit row is written here, before the
+    document is gone, so it never depends on a hook firing after the fact).
+    """
+    if not ({"DMS Admin", "System Manager"} & set(frappe.get_roles())):
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    doc = frappe.get_doc("Document Library", document_name)
+
+    # Workflow Action rows are the workflow engine's own bookkeeping (one per
+    # transition/notification), not a real business dependency -- without
+    # clearing them first, check_if_doc_is_linked would block every workflow-
+    # governed document that has ever been actioned, which is all of them.
+    clear_workflow_actions(doc.doctype, doc.name)
+
+    check_if_doc_is_linked(doc, method="Delete")
+    check_if_doc_is_dynamically_linked(doc, method="Delete")
+
+    snapshot = {
+        "title": doc.title,
+        "department": doc.department,
+        "category": doc.category,
+        "version": doc.version,
+        "number": doc.document_number,
+        "file": doc.file,
+    }
+
+    try:
+        if doc.docstatus == 1:
+            frappe.db.set_value(
+                "Document Library", doc.name, "docstatus", 2, update_modified=False
+            )
+
+        _insert_audit_log(
+            action="Deleted (Force Delete)",
+            document=doc.name,
+            document_snapshot=snapshot,
+        )
+
+        frappe.delete_doc("Document Library", doc.name, ignore_permissions=True, force=True)
+    except Exception:
+        frappe.db.rollback()
+        raise
+
+    frappe.db.commit()
+    return {"deleted": document_name}
 
 
 def log_request_audit_event(doc, method):
@@ -158,10 +240,28 @@ def log_request_audit_event(doc, method):
 
 _INACTIVE_EMPLOYEE_STATUSES = frozenset({"Left", "Inactive", "Suspended"})
 
-# Roles with unrestricted access to the Document Library. Reviewers and
-# approvers must see every document — they cannot review/approve documents
-# the row-level Employee filter would hide from them.
-_DMS_UNRESTRICTED_ROLES = {"System Manager", "DMS Admin", "DMS Approver", "DMS Reviewer"}
+# Only System Manager (IT / central oversight) sees every department's
+# documents unconditionally. DMS Admin/Approver/Reviewer/Employee are all
+# department-scoped below — a document's own "Applies to All Departments"
+# checkbox is the only other way past that restriction.
+_DMS_UNRESTRICTED_ROLES = {"System Manager"}
+
+
+def _user_department_scope(user):
+    """Resolve the department names a user's own department-scoped access
+    should include: their own Employee.department plus any sub-departments
+    under it (mirrors the department+subdepartment scoping already used for
+    bulk training assignment). Returns None if the user has no linked
+    Employee/department, meaning they get no department-based access at all
+    (only documents explicitly marked "Applies to All Departments", or —
+    for the Employee role — documents they own or are directly assigned)."""
+    department = frappe.db.get_value(
+        "Employee", {"user_id": user}, "department", order_by="creation asc"
+    )
+    if not department:
+        return None
+    from frappe.utils.nestedset import get_descendants_of
+    return [department] + get_descendants_of("Department", department, ignore_permissions=True)
 
 
 def handle_employee_status_change(doc, method):
@@ -209,6 +309,9 @@ def notify_upcoming_reviews():
         )
 
 
+_DMS_ROLES = {"DMS Admin", "DMS Approver", "DMS Reviewer", "Employee"}
+
+
 def get_permission_query_conditions(user):
     if not user: user = frappe.session.user
     if user == "Administrator": return ""
@@ -217,13 +320,34 @@ def get_permission_query_conditions(user):
     if set(roles) & _DMS_UNRESTRICTED_ROLES:
         return ""
 
+    if not set(roles) & _DMS_ROLES:
+        # Authenticated user holds no DMS role — deny list access entirely.
+        # Returning "" (no filter) would grant full read access; "1=0" returns an empty list.
+        return "1=0"
+
     conditions = []
+
+    # Every DMS role (Admin/Approver/Reviewer/Employee) is scoped to their own
+    # department (+ sub-departments) unless the document applies to all
+    # departments — reviewers/approvers can no longer see other departments'
+    # documents just by holding the role.
+    departments = _user_department_scope(user)
+    if departments:
+        escaped_depts = ", ".join(frappe.db.escape(d) for d in departments)
+        conditions.append(
+            f"(`tabDocument Library`.applies_to_all_departments = 1 "
+            f"OR `tabDocument Library`.department IN ({escaped_depts}))"
+        )
+    else:
+        conditions.append("`tabDocument Library`.applies_to_all_departments = 1")
 
     if "Employee" in roles:
         escaped_user = frappe.db.escape(user)
-        # Employees see only documents assigned to them through a DMS Training
-        # Record, documents they created themselves, or documents created from
-        # a Document Request they raised or that was raised for them.
+        # On top of department scoping, an employee also always sees documents
+        # assigned to them through a DMS Training Record, documents they
+        # created themselves, or documents created from a Document Request
+        # they raised or that was raised for them — even outside their own
+        # department (e.g. cross-department training).
         assigned_via_training = (
             "EXISTS ("
             "SELECT 1 FROM `tabDMS Training Record` tr "
@@ -246,12 +370,7 @@ def get_permission_query_conditions(user):
             f"OR {via_request})"
         )
 
-    if conditions:
-        return "(" + " OR ".join(conditions) + ")"
-
-    # Authenticated user holds no DMS role — deny list access entirely.
-    # Returning "" (no filter) would grant full read access; "1=0" returns an empty list.
-    return "1=0"
+    return "(" + " OR ".join(conditions) + ")"
 
 
 def has_permission(doc, user=None, ptype="read"):
@@ -271,6 +390,16 @@ def has_permission(doc, user=None, ptype="read"):
     # Row-level restrictions below apply to reads only. Create/write/delete are
     # governed by DocPerm — defer to it rather than denying here.
     if ptype != "read":
+        return True
+
+    if not set(roles) & _DMS_ROLES:
+        return False
+
+    if doc.applies_to_all_departments:
+        return True
+
+    departments = _user_department_scope(user)
+    if departments and doc.department in departments:
         return True
 
     if "Employee" in roles:
@@ -322,18 +451,21 @@ def _is_assigned_via_training(document, user):
     )
 
 
-# Roles that may see the whole File list. Personal training certificates are
-# private to the employee they belong to.
-_FILE_UNRESTRICTED_ROLES = {"System Manager", "DMS Admin"}
-# Reviewers/approvers see every file except other employees' personal certificates.
-_FILE_REVIEW_ROLES = {"DMS Approver", "DMS Reviewer"}
+# Only System Manager sees the whole File list unconditionally. DMS Admin/
+# Approver/Reviewer are department-scoped like everywhere else in this app —
+# see _user_department_scope. Personal training certificates stay private to
+# the employee they belong to regardless of role.
+_FILE_UNRESTRICTED_ROLES = {"System Manager"}
+_FILE_REVIEW_ROLES = {"DMS Admin", "DMS Approver", "DMS Reviewer"}
 _CERT_SUFFIX = "-certificate.pdf"
 
 
 def file_permission_query_conditions(user):
     """Restrict the File list: employees see only their own uploads and files on
-    their assigned documents/training; approvers see everything except other
-    employees' personal certificates; admins see everything."""
+    their assigned documents/training; admins/approvers/reviewers see every
+    file on a document/training record in their own department (+ sub-
+    departments) or marked Applies to All Departments, except other
+    employees' personal certificates."""
     if not user:
         user = frappe.session.user
     if user == "Administrator":
@@ -346,13 +478,33 @@ def file_permission_query_conditions(user):
     escaped_user = frappe.db.escape(user)
 
     if roles & _FILE_REVIEW_ROLES:
-        # Everything except personal certificates that belong to someone else.
         is_cert = "RIGHT(`tabFile`.file_name, 16) = '-certificate.pdf'"
         emp_id = frappe.db.get_value("Employee", {"user_id": user}, "name")
         if emp_id:
             own_cert_frag = frappe.db.escape(f"-{emp_id}-certificate.pdf")
-            return f"(NOT {is_cert} OR INSTR(`tabFile`.file_name, {own_cert_frag}) > 0)"
-        return f"(NOT {is_cert})"
+            cert_scope = f"(NOT {is_cert} OR INSTR(`tabFile`.file_name, {own_cert_frag}) > 0)"
+        else:
+            cert_scope = f"(NOT {is_cert})"
+
+        departments = _user_department_scope(user)
+        dept_condition = (
+            "`dl`.applies_to_all_departments = 1"
+            + (f" OR `dl`.department IN ({', '.join(frappe.db.escape(d) for d in departments)})" if departments else "")
+        )
+        in_scope_doc_files = (
+            "(`tabFile`.attached_to_doctype = 'Document Library' AND EXISTS ("
+            "SELECT 1 FROM `tabDocument Library` dl "
+            f"WHERE dl.name = `tabFile`.attached_to_name AND ({dept_condition})"
+            "))"
+        )
+        in_scope_training_files = (
+            "(`tabFile`.attached_to_doctype = 'DMS Training Record' AND EXISTS ("
+            "SELECT 1 FROM `tabDMS Training Record` tr "
+            "INNER JOIN `tabDocument Library` dl ON dl.name = tr.document "
+            f"WHERE tr.name = `tabFile`.attached_to_name AND ({dept_condition})"
+            "))"
+        )
+        return f"(({in_scope_doc_files} OR {in_scope_training_files}) AND {cert_scope})"
 
     assigned_doc_files = (
         "(`tabFile`.attached_to_doctype = 'Document Library' AND EXISTS ("
@@ -409,9 +561,6 @@ def file_has_permission(doc, user=None, ptype="read"):
         return True
 
     is_certificate = (doc.file_name or "").endswith(_CERT_SUFFIX)
-
-    if roles & _FILE_REVIEW_ROLES and not is_certificate:
-        return True
 
     if is_certificate:
         # personal training certificate: only the employee it names may read it
@@ -544,7 +693,7 @@ def _resolve_dashboard_employee(employee=None):
 def get_my_training_dashboard(employee=None):
     target_employee = _resolve_dashboard_employee(employee)
 
-    todo = []
+    all_trainings = []
     completed_scores = []
     total_assigned = 0
     total_completed = 0
@@ -557,6 +706,7 @@ def get_my_training_dashboard(employee=None):
                 da.status AS status,
                 da.assessment_score AS assessment_score,
                 da.due_date AS due_date,
+                da.completion_date AS completion_date,
                 trn.document AS document,
                 trn.name AS training_record
             FROM `tabDocument Acknowledgement` da
@@ -575,13 +725,14 @@ def get_my_training_dashboard(employee=None):
                 total_completed += 1
                 if row.assessment_score is not None:
                     completed_scores.append(row.assessment_score)
-            else:
-                todo.append({
-                    "document": row.document,
-                    "status": row.status,
-                    "due_date": row.due_date,
-                    "training_record": row.training_record,
-                })
+            all_trainings.append({
+                "document": row.document,
+                "status": row.status,
+                "due_date": frappe.utils.format_date(row.due_date) if row.due_date else None,
+                "completion_date": frappe.utils.format_date(row.completion_date) if row.completion_date else None,
+                "assessment_score": row.assessment_score,
+                "training_record": row.training_record,
+            })
 
     overall_score = round(sum(completed_scores) / len(completed_scores), 1) if completed_scores else None
     completion_pct = round(total_completed / total_assigned * 100, 1) if total_assigned else 0.0
@@ -624,7 +775,7 @@ def get_my_training_dashboard(employee=None):
         "completion_pct": completion_pct,
         "total_assigned": total_assigned,
         "total_completed": total_completed,
-        "todo": todo,
+        "all_trainings": all_trainings,
         "leaderboard": leaderboard[:20],
     }
 
@@ -827,30 +978,63 @@ _SCORE_BUCKETS = [
 
 
 @frappe.whitelist()
-def get_training_analytics():
+def get_training_analytics(from_date=None, to_date=None, department=None):
     if not _is_admin_user():
         frappe.throw("Only managers can view training analytics.", frappe.PermissionError)
 
-    # Monthly average score trend, across every graded attempt org-wide.
+    # ---- shared filter fragments ----
+    score_conditions = ["1=1"]
+    score_values = {}
+    if from_date:
+        score_conditions.append("sh.recorded_on >= %(from_date)s")
+        score_values["from_date"] = from_date
+    if to_date:
+        score_conditions.append("sh.recorded_on <= %(to_date)s")
+        score_values["to_date"] = to_date
+    if department:
+        score_conditions.append("emp.department = %(department)s")
+        score_values["department"] = department
+    score_where = " AND ".join(score_conditions)
+    # Score History join to Employee is only needed when filtering by department.
+    score_join = "INNER JOIN `tabEmployee` emp ON emp.name = sh.employee" if department else ""
+
+    # Monthly average score trend, across every graded attempt (respects filters).
     monthly_rows = frappe.db.sql(
-        """
-        SELECT DATE_FORMAT(recorded_on, '%%Y-%%m') AS month, AVG(score) AS avg_score, COUNT(*) AS attempts
-        FROM `tabDMS Training Score History`
+        f"""
+        SELECT DATE_FORMAT(sh.recorded_on, '%%Y-%%m') AS month,
+            AVG(sh.score) AS avg_score,
+            COUNT(*) AS attempts,
+            SUM(CASE WHEN sh.quiz_passed THEN 1 ELSE 0 END) AS passed
+        FROM `tabDMS Training Score History` sh
+        {score_join}
+        WHERE {score_where}
         GROUP BY month
         ORDER BY month ASC
         """,
-        {},
+        score_values,
         as_dict=True,
     )
     score_trend = [
         {"month": r.month, "avg_score": round(r.avg_score, 1), "attempts": r.attempts}
         for r in monthly_rows
     ]
+    # Pass rate as its own trend -- a flat/rising average score can mask a
+    # falling pass rate (many scores barely scraping by), so track separately.
+    pass_rate_trend = [
+        {
+            "month": r.month,
+            "pass_rate": round(r.passed / r.attempts * 100, 1) if r.attempts else 0.0,
+            "attempts": r.attempts,
+        }
+        for r in monthly_rows
+    ]
 
-    # Score distribution across every graded attempt on record.
+    # Score distribution across every graded attempt matching the filters.
     all_scores = [
         r.score for r in frappe.db.sql(
-            "SELECT score FROM `tabDMS Training Score History`", as_dict=True
+            f"SELECT sh.score FROM `tabDMS Training Score History` sh {score_join} WHERE {score_where}",
+            score_values,
+            as_dict=True,
         )
     ]
     distribution = []
@@ -858,17 +1042,30 @@ def get_training_analytics():
         count = sum(1 for s in all_scores if lo <= s < hi)
         distribution.append({"label": label, "count": count})
 
-    # Completion rate by department, from Document Acknowledgement (same
-    # source as Training Matrix Report), excluding non-real assignment rows.
+    # ---- Document Acknowledgement based metrics (completion + overdue) ----
+    ack_conditions = ["da.status NOT IN ('Suggested', 'Excused')"]
+    ack_values = {}
+    if department:
+        ack_conditions.append("emp.department = %(department)s")
+        ack_values["department"] = department
+    if from_date:
+        ack_conditions.append("(da.due_date IS NULL OR da.due_date >= %(from_date)s)")
+        ack_values["from_date"] = from_date
+    if to_date:
+        ack_conditions.append("(da.due_date IS NULL OR da.due_date <= %(to_date)s)")
+        ack_values["to_date"] = to_date
+    ack_where = " AND ".join(ack_conditions)
+
     dept_rows = frappe.db.sql(
-        """
+        f"""
         SELECT
             emp.department AS department,
             da.status AS status
         FROM `tabDocument Acknowledgement` da
         LEFT JOIN `tabEmployee` emp ON emp.name = da.employee
-        WHERE da.status NOT IN ('Suggested', 'Excused')
+        WHERE {ack_where}
         """,
+        ack_values,
         as_dict=True,
     )
     by_dept = {}
@@ -890,9 +1087,156 @@ def get_training_analytics():
     ]
     completion_by_department.sort(key=lambda r: r["completion_pct"], reverse=True)
 
+    # Overdue trainings grouped by the month they were due -- shows whether
+    # overdue risk is concentrated in old, long-stale due dates or is a
+    # recent spike, rather than just a single current overdue count.
+    overdue_conditions = ["da.status = 'Overdue'"]
+    overdue_values = {}
+    if department:
+        overdue_conditions.append("emp.department = %(department)s")
+        overdue_values["department"] = department
+    if from_date:
+        overdue_conditions.append("da.due_date >= %(from_date)s")
+        overdue_values["from_date"] = from_date
+    if to_date:
+        overdue_conditions.append("da.due_date <= %(to_date)s")
+        overdue_values["to_date"] = to_date
+    overdue_where = " AND ".join(overdue_conditions)
+
+    overdue_rows = frappe.db.sql(
+        f"""
+        SELECT DATE_FORMAT(da.due_date, '%%Y-%%m') AS month, COUNT(*) AS overdue_count
+        FROM `tabDocument Acknowledgement` da
+        LEFT JOIN `tabEmployee` emp ON emp.name = da.employee
+        WHERE {overdue_where}
+        GROUP BY month
+        ORDER BY month ASC
+        """,
+        overdue_values,
+        as_dict=True,
+    )
+    overdue_trend = [{"month": r.month, "overdue_count": r.overdue_count} for r in overdue_rows]
+
+    # ---- Per-employee scores (every employee, not just a top-N leaderboard) ----
+    # Own copy of the department/due_date filter (same shape as ack_where/
+    # ack_values above, intentionally not the same variables) so an edit to
+    # one query's filter can't silently change the other's.
+    emp_conditions = ["da.status NOT IN ('Suggested', 'Excused')"]
+    emp_values = {}
+    if department:
+        emp_conditions.append("emp.department = %(department)s")
+        emp_values["department"] = department
+    if from_date:
+        emp_conditions.append("(da.due_date IS NULL OR da.due_date >= %(from_date)s)")
+        emp_values["from_date"] = from_date
+    if to_date:
+        emp_conditions.append("(da.due_date IS NULL OR da.due_date <= %(to_date)s)")
+        emp_values["to_date"] = to_date
+    emp_where = " AND ".join(emp_conditions)
+
+    emp_rows = frappe.db.sql(
+        f"""
+        SELECT
+            da.employee AS employee,
+            emp.employee_name AS employee_name,
+            emp.department AS department,
+            da.status AS status,
+            da.assessment_score AS assessment_score
+        FROM `tabDocument Acknowledgement` da
+        LEFT JOIN `tabEmployee` emp ON emp.name = da.employee
+        WHERE {emp_where}
+        """,
+        emp_values,
+        as_dict=True,
+    )
+    by_employee = {}
+    for row in emp_rows:
+        if not row.employee:
+            continue
+        bucket = by_employee.setdefault(row.employee, {
+            "employee": row.employee,
+            "employee_name": row.employee_name,
+            "department": row.department or "Unassigned",
+            "total": 0,
+            "completed": 0,
+            "scores": [],
+        })
+        bucket["total"] += 1
+        if row.status == "Completed":
+            bucket["completed"] += 1
+            if row.assessment_score is not None:
+                bucket["scores"].append(row.assessment_score)
+
+    employee_scores = []
+    for data in by_employee.values():
+        scores = data.pop("scores")
+        employee_scores.append({
+            **data,
+            "overall_score": round(sum(scores) / len(scores), 1) if scores else None,
+            "completion_pct": round(data["completed"] / data["total"] * 100, 1) if data["total"] else 0.0,
+        })
+    employee_scores.sort(key=lambda r: (r["overall_score"] is None, -(r["overall_score"] or 0)))
+
+    # ---- Every employee's pending/overdue trainings, org-wide (managers need
+    # to see everyone's outstanding items, not just the aggregate rate) ----
+    pending_conditions = ["da.status IN ('Pending', 'Overdue', 'In Progress', 'Failed')"]
+    pending_values = {}
+    if department:
+        pending_conditions.append("emp.department = %(department)s")
+        pending_values["department"] = department
+    if from_date:
+        pending_conditions.append("(da.due_date IS NULL OR da.due_date >= %(from_date)s)")
+        pending_values["from_date"] = from_date
+    if to_date:
+        pending_conditions.append("(da.due_date IS NULL OR da.due_date <= %(to_date)s)")
+        pending_values["to_date"] = to_date
+    pending_where = " AND ".join(pending_conditions)
+
+    pending_rows = frappe.db.sql(
+        f"""
+        SELECT
+            emp.employee_name AS employee_name,
+            emp.department AS department,
+            trn.document AS document,
+            da.status AS status,
+            da.due_date AS due_date,
+            trn.name AS training_record
+        FROM `tabDocument Acknowledgement` da
+        INNER JOIN `tabDMS Training Record` trn ON trn.name = da.parent AND da.parenttype = 'DMS Training Record'
+        LEFT JOIN `tabEmployee` emp ON emp.name = da.employee
+        WHERE {pending_where}
+        ORDER BY da.due_date ASC
+        """,
+        pending_values,
+        as_dict=True,
+    )
+    pending_trainings = [
+        {
+            "employee_name": r.employee_name,
+            "department": r.department or "Unassigned",
+            "document": r.document,
+            "status": r.status,
+            "due_date": frappe.utils.format_date(r.due_date) if r.due_date else None,
+            "due_date_raw": str(r.due_date) if r.due_date else None,
+            "training_record": r.training_record,
+        }
+        for r in pending_rows
+    ]
+
     return {
         "score_trend": score_trend,
+        "pass_rate_trend": pass_rate_trend,
         "distribution": distribution,
         "completion_by_department": completion_by_department,
+        "overdue_trend": overdue_trend,
+        "employee_scores": employee_scores,
+        "pending_trainings": pending_trainings,
         "total_attempts": len(all_scores),
     }
+
+
+@frappe.whitelist()
+def get_departments_for_filter():
+    if not _is_admin_user():
+        frappe.throw("Only managers can view training analytics.", frappe.PermissionError)
+    return frappe.get_all("Department", filters={"disabled": 0}, pluck="name", order_by="name asc")

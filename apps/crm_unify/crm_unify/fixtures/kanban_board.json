@@ -1,35 +1,158 @@
 [
  {
-  "doctype": "Kanban Board",
-  "name": "Lead Pipeline",
-  "kanban_board_name": "Lead Pipeline",
-  "reference_doctype": "Lead",
-  "field_name": "lead_stage",
   "columns": [
-   {"column_name": "New", "status": "Active"},
-   {"column_name": "Contacted", "status": "Active"},
-   {"column_name": "Qualified", "status": "Active"},
-   {"column_name": "Proposal Sent", "status": "Active"},
-   {"column_name": "Negotiation", "status": "Active"},
-   {"column_name": "Won", "status": "Active"},
-   {"column_name": "Lost", "status": "Active"}
-  ]
+   {
+    "column_name": "New",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Contacted",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Qualified",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Proposal Sent",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Negotiation",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Won",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Lost",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Unsuccessful",
+    "indicator": "Gray",
+    "order": null,
+    "status": "Active"
+   },
+   {
+    "column_name": "Competitor",
+    "indicator": "Gray",
+    "order": null,
+    "status": "Active"
+   },
+   {
+    "column_name": "Budget",
+    "indicator": "Gray",
+    "order": null,
+    "status": "Active"
+   },
+   {
+    "column_name": "Project Cancelled",
+    "indicator": "Gray",
+    "order": null,
+    "status": "Active"
+   },
+   {
+    "column_name": "No Response",
+    "indicator": "Gray",
+    "order": null,
+    "status": "Active"
+   },
+   {
+    "column_name": "Requirement Changed",
+    "indicator": "Gray",
+    "order": null,
+    "status": "Active"
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "Kanban Board",
+  "field_name": "lead_stage",
+  "fields": null,
+  "filters": null,
+  "kanban_board_name": "Lead Pipeline",
+  "modified": "2026-09-29 06:16:07.228572",
+  "name": "Lead Pipeline",
+  "private": 0,
+  "reference_doctype": "Lead",
+  "show_labels": 0
  },
  {
-  "doctype": "Kanban Board",
-  "name": "Opportunity Pipeline",
-  "kanban_board_name": "Opportunity Pipeline",
-  "reference_doctype": "Opportunity",
-  "field_name": "lead_stage",
   "columns": [
-   {"column_name": "Qualification", "status": "Active"},
-   {"column_name": "Needs Analysis", "status": "Active"},
-   {"column_name": "Value Proposition", "status": "Active"},
-   {"column_name": "Decision Makers", "status": "Active"},
-   {"column_name": "Proposal", "status": "Active"},
-   {"column_name": "Negotiation", "status": "Active"},
-   {"column_name": "Closed Won", "status": "Active"},
-   {"column_name": "Closed Lost", "status": "Active"}
-  ]
+   {
+    "column_name": "Qualification",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Needs Analysis",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Value Proposition",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Decision Makers",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Proposal",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Negotiation",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Closed Won",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   },
+   {
+    "column_name": "Closed Lost",
+    "indicator": null,
+    "order": "[]",
+    "status": "Active"
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "Kanban Board",
+  "field_name": "lead_stage",
+  "fields": null,
+  "filters": null,
+  "kanban_board_name": "Opportunity Pipeline",
+  "modified": "2026-09-23 08:34:02.922955",
+  "name": "Opportunity Pipeline",
+  "private": 0,
+  "reference_doctype": "Opportunity",
+  "show_labels": 0
  }
 ]

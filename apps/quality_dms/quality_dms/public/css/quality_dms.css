@@ -944,3 +944,57 @@ body.dms-locked-filter .filter-x-button {
 	display: none !important;
 }
 
+/* ── Unread-count badge (WhatsApp-style) on the Notification sidebar item
+   and the DMS app icon in the workspace grid — see dms_update_notification_badge
+   in quality_dms.js. ────────────────────────────────────────────────────── */
+.dms-notif-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: #fa3e3e;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1;
+	box-shadow: 0 0 0 2px var(--card-bg, #fff);
+	/* .item-anchor (the sidebar row) clips overflow, and this badge is the
+	   last element in .sidebar-item-control flush against its right edge --
+	   without this margin the circle's own curve gets cut off by the anchor's
+	   right boundary instead of rendering as a full circle. */
+	margin-right: 6px;
+}
+
+.desktop-icon {
+	position: relative;
+}
+
+/* ── App-icon grid recolors ───────────────────────────────────────────────
+   Frappe's official "Solid" icon set intentionally uses one brand blue for
+   every ERPNext module icon (same hex across buying.svg, stock.svg, etc.),
+   so distinguishing them by color -- to match a reference design with a
+   varied palette -- means recoloring here rather than in the SVGs
+   themselves: those are looked up automatically by app+label (see
+   frappe.utils.get_desktop_icon) and take priority over Desktop Icon.logo_url,
+   and clearing the `app` field to bypass that lookup would also break
+   Desktop Icon.check_app_permission's visibility check for these records
+   (it matches on `app == installed_app_name`) -- so the icon would vanish
+   entirely, not just lose its color. hue-rotate leaves true white/black
+   (the glyph) unaffected and only shifts the saturated background hue.
+   NOTE: these rules were removed once the actual vendor SVG files for
+   Assets/Buying/Manufacturing/Projects/Quality/Selling/Stock/Subcontracting/
+   Organization were replaced with real custom uploads -- a leftover
+   hue-rotate here would double-recolor the new image on top of itself. */
+
+.dms-notif-badge-icon {
+	/* top/left are set inline by dms_apply_icon_badge() -- computed from the
+	   icon box's actual offset within the (wider) tile, since .icon-container
+	   clips overflow at its own rounded corners and can't host the badge itself. */
+	position: absolute;
+	z-index: 2;
+	pointer-events: none;
+}
+

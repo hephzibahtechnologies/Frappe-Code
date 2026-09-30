@@ -25,8 +25,8 @@ app_license = "mit"
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/quality_dms/css/quality_dms.css?v=32"
-app_include_js = "/assets/quality_dms/js/quality_dms.js?v=31"
+app_include_css = "/assets/quality_dms/css/quality_dms.css?v=40"
+app_include_js = "/assets/quality_dms/js/quality_dms.js?v=46"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/quality_dms/css/quality_dms.css"
@@ -43,7 +43,7 @@ app_include_js = "/assets/quality_dms/js/quality_dms.js?v=31"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Payment Entry": "public/js/payment_entry.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}

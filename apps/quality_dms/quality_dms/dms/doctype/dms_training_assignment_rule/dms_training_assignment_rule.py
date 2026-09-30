@@ -17,7 +17,10 @@ def _get_matching_rules(document_category, document_type):
 	rules = frappe.get_all(
 		"DMS Training Assignment Rule",
 		filters={"active": 1},
-		fields=["name", "document_category", "document_type", "department", "role", "retraining_months", "curriculum"],
+		fields=[
+			"name", "document_category", "document_type", "department", "role",
+			"company", "employee_group", "retraining_months", "curriculum",
+		],
 	)
 	matched = []
 	for rule in rules:
@@ -32,12 +35,25 @@ def _get_matching_rules(document_category, document_type):
 
 
 def _resolve_employees(rule):
-	"""Resolve the Employees targeted by a single rule's department/role filters."""
+	"""Resolve the Employees targeted by a single rule's department/role/company/
+	employee-group filters. All filters set on the rule must match (AND)."""
 	filters = {"status": "Active"}
 	if rule.department:
 		filters["department"] = rule.department
+	if rule.company:
+		filters["company"] = rule.company
 
 	employees = frappe.get_all("Employee", filters=filters, fields=["name", "user_id"])
+
+	if rule.employee_group:
+		group_members = set(
+			frappe.get_all(
+				"Employee Group Table",
+				filters={"parenttype": "Employee Group", "parent": rule.employee_group},
+				pluck="employee",
+			)
+		)
+		employees = [e for e in employees if e.name in group_members]
 
 	if not rule.role:
 		return [e.name for e in employees]
@@ -55,6 +71,13 @@ def _resolve_employees(rule):
 def _employee_matches_rule(employee, rule):
 	if rule.department and employee.department != rule.department:
 		return False
+	if rule.company and employee.company != rule.company:
+		return False
+	if rule.employee_group and not frappe.db.exists(
+		"Employee Group Table",
+		{"parenttype": "Employee Group", "parent": rule.employee_group, "employee": employee.name},
+	):
+		return False
 	if rule.role:
 		if not employee.user_id:
 			return False
@@ -71,7 +94,7 @@ def apply_onboarding_rules(doc, method=None):
 	Employee document itself."""
 	employee_name = doc.name if hasattr(doc, "name") else doc
 	employee = frappe.db.get_value(
-		"Employee", employee_name, ["name", "department", "user_id", "status"], as_dict=True
+		"Employee", employee_name, ["name", "department", "company", "user_id", "status"], as_dict=True
 	)
 	if not employee or employee.status != "Active":
 		return
@@ -79,7 +102,7 @@ def apply_onboarding_rules(doc, method=None):
 	rules = frappe.get_all(
 		"DMS Training Assignment Rule",
 		filters={"active": 1},
-		fields=["name", "department", "role", "curriculum"],
+		fields=["name", "department", "role", "company", "employee_group", "curriculum"],
 	)
 
 	for rule in rules:

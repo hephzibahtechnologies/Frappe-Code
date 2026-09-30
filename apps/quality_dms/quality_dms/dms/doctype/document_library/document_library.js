@@ -90,6 +90,33 @@ frappe.ui.form.on("Document Library", {
 			}
 		}
 
+		// ── Force Delete (admin-only, any workflow stage) ────────────────────
+		// The workflow only offers Mark as Obsolete/Archive from Published, with
+		// no path back to a cancellable state, so a plain Cancel-then-Delete is
+		// unreachable from the UI. This calls the whitelisted escape hatch that
+		// still enforces link integrity and always writes the audit row.
+		if (!frm.is_new() && (frappe.user.has_role("DMS Admin") || frappe.user.has_role("System Manager"))) {
+			frm.add_custom_button(__("Force Delete"), function() {
+				frappe.confirm(
+					__("This permanently deletes {0} regardless of its current workflow stage. This cannot be undone. Continue?", [frm.docname]),
+					function() {
+						frappe.call({
+							method: "quality_dms.dms.api.force_delete_document",
+							args: { document_name: frm.docname },
+							freeze: true,
+							freeze_message: __("Deleting..."),
+							callback: function(r) {
+								if (r.message && r.message.deleted) {
+									frappe.show_alert({ message: __("Document deleted"), indicator: "green" });
+									frappe.set_route("List", "Document Library");
+								}
+							}
+						});
+					}
+				);
+			}, __("Actions"));
+		}
+
 		// ── Workflow action buttons ──────────────────────────────────────────
 		if (frm.doc.workflow_state === "Published") {
 			frm.add_custom_button(__("Create New Version"), function() {

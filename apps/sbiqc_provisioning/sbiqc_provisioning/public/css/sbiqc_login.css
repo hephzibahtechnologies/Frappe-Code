@@ -239,7 +239,8 @@ body:has(.sbiqc-login-shell) {
    after it -- specificity beats source order. */
 .sbiqc-form-panel .btn-login,
 .sbiqc-form-panel .btn-forgot,
-.sbiqc-form-panel .btn-login-with-email-link {
+.sbiqc-form-panel .btn-login-with-email-link,
+.sbiqc-form-panel .btn-update {
 	background: linear-gradient(90deg, #1f4e79 0%, #4a86b8 100%) !important;
 	border: none !important;
 	border-radius: 8px !important;
@@ -248,6 +249,14 @@ body:has(.sbiqc-login-shell) {
 	letter-spacing: 0.03em !important;
 	box-shadow: 0 8px 20px -8px rgba(31, 78, 121, 0.6) !important;
 	color: #ffffff !important;
+	width: 100%;
+}
+.sbiqc-form-panel .btn-update:disabled {
+	opacity: 0.55;
+	box-shadow: none !important;
+}
+.sbiqc-form-panel .password-strength-indicator {
+	right: 40px;
 }
 
 .sbiqc-form-panel .login-divider {
@@ -270,4 +279,32 @@ body:has(.sbiqc-login-shell) {
 	padding: 18px 24px 4px;
 	font-size: 12.5px;
 	color: #6b7480;
+}
+
+/* ---- no page scrollbars on the login screen ----------------------------
+   .sbiqc-page carried `min-height: 100vh` together with `padding: 32px`, and
+   nothing in this file ever set border-box, so the box resolved to
+   100vh + 64px and always overflowed vertically. The horizontal bar was the
+   body's default 8px margin against a 100%-wide child. Both were visible on
+   QA (qa.sbiqc.com/login). Scoped to the login shell so no other page is
+   affected. */
+.sbiqc-page,
+.sbiqc-page *,
+.sbiqc-page *::before,
+.sbiqc-page *::after {
+	box-sizing: border-box;
+}
+
+body.page-login,
+body:has(.sbiqc-login-shell) {
+	margin: 0;
+	overflow-x: hidden;
+}
+
+.sbiqc-page {
+	width: 100%;
+	max-width: 100%;
+	min-height: 100vh;
+	/* dvh keeps it exact on mobile, where the URL bar makes vh overshoot */
+	min-height: 100dvh;
 }

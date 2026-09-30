@@ -29,3 +29,16 @@ extend_bootinfo = "sbiqc_provisioning.whitelabel.extend_bootinfo"
 after_migrate = [
     "sbiqc_provisioning.whitelabel.apply_branding",
 ]
+
+# ── Monitoring ──
+# get_bench_health() was previously only callable on demand from the
+# provisioning console — nothing polled it. This checks Redis/MariaDB/worker
+# health every 15 minutes and logs an Error Log entry if anything's wrong,
+# so a broken provisioning host actually gets noticed.
+scheduler_events = {
+    "cron": {
+        "*/15 * * * *": [
+            "sbiqc_provisioning.provisioner.monitoring.check_bench_health",
+        ],
+    },
+}

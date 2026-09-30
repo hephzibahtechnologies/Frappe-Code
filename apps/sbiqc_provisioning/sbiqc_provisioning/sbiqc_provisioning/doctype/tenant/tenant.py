@@ -31,6 +31,13 @@ class Tenant(Document):
 		if self.subdomain in RESERVED:
 			frappe.throw(_("'{0}' is a reserved subdomain.").format(self.subdomain))
 
+		if not (self.admin_email or "").strip():
+			# The tenant admin password is randomly generated and never surfaced
+			# anywhere (see provisioner/engine.py) — without an email to deliver
+			# the password-reset link to, the tenant would be permanently
+			# unrecoverable, so this is now required rather than optional.
+			frappe.throw(_("Admin Email is required — it's the only way the tenant admin receives access."))
+
 		domain = (
 			frappe.conf.get("tenant_domain_suffix")
 			or ("sbiqc.com" if frappe.conf.get("is_production") else "localhost")

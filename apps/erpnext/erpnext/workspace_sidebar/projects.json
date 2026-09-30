@@ -98,7 +98,8 @@
    "link_to": "Activity Type",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "activity"
   },
   {
    "child": 1,
@@ -109,7 +110,8 @@
    "link_to": "Activity Cost",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "dollar-sign"
   },
   {
    "child": 1,
@@ -120,7 +122,8 @@
    "link_to": "Project Template",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "layout-template"
   },
   {
    "child": 1,
@@ -131,7 +134,8 @@
    "link_to": "Project Type",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "tag"
   },
   {
    "child": 1,
@@ -142,7 +146,8 @@
    "link_to": "Project Update",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "refresh-cw"
   },
   {
    "child": 0,
@@ -158,7 +163,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "",
+   "icon": "file-text",
    "indent": 0,
    "keep_closed": 0,
    "label": "Project Summary",
@@ -176,7 +181,8 @@
    "link_to": "Daily Timesheet Summary",
    "link_type": "Report",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "calendar-days"
   },
   {
    "child": 1,
@@ -187,7 +193,8 @@
    "link_to": "Timesheet Billing Summary",
    "link_type": "Report",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "receipt-text"
   },
   {
    "child": 1,
@@ -198,7 +205,8 @@
    "link_to": "Project wise Stock Tracking",
    "link_type": "Report",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "package"
   },
   {
    "child": 1,
@@ -209,7 +217,8 @@
    "link_to": "Delayed Tasks Summary",
    "link_type": "Report",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "icon": "clock-alert"
   },
   {
    "child": 0,
@@ -224,7 +233,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-02-23 22:49:54.941187",
+ "modified": "2026-08-18 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Projects",
  "module_onboarding": "Projects Onboarding",

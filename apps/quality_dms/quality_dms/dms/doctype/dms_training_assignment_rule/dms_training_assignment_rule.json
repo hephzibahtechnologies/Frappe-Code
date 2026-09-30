@@ -16,6 +16,8 @@
   "col_break_2",
   "department",
   "role",
+  "company",
+  "employee_group",
   "section_onboarding",
   "curriculum"
  ],
@@ -73,6 +75,20 @@
    "fieldtype": "Link",
    "label": "Target Role",
    "options": "Role"
+  },
+  {
+   "description": "Target Employees belonging to this Company. Leave blank to target every company.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Target Company",
+   "options": "Company"
+  },
+  {
+   "description": "Target Employees who are members of this Employee Group. Combines with the other filters above (all must match).",
+   "fieldname": "employee_group",
+   "fieldtype": "Link",
+   "label": "Target Employee Group",
+   "options": "Employee Group"
   },
   {
    "collapsible": 1,

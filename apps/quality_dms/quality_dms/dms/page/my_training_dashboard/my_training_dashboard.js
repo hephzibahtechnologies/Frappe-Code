@@ -12,13 +12,14 @@ class MyTrainingDashboard {
 	constructor(page) {
 		this.page = page;
 		this.$body = $(page.body);
+		this.trainingStatusFilter = "";
 		this.render_shell();
 		this.add_transcript_button();
 		this.load();
 	}
 
 	add_transcript_button() {
-		this.page.add_inner_button(__("Download My Training Transcript"), () => {
+		this.page.add_inner_button(__("Download My Training Report"), () => {
 			frappe.show_alert({ message: __("Generating your transcript..."), indicator: "blue" });
 			frappe.call({
 				method: "quality_dms.dms.api.generate_training_transcript",
@@ -114,8 +115,18 @@ class MyTrainingDashboard {
 				</div>
 
 				<div class="mtd-card mtd-todo-card mtd-accent-amber">
-					<div class="mtd-card-title">${icons.list}${__("Pending Trainings")}</div>
-					${this.todo_table(data.todo)}
+					<div class="mtd-card-title-row">
+						<div class="mtd-card-title">${icons.list}${__("My Trainings")} <span class="mtd-count" id="mtd-trainings-count"></span></div>
+						<select class="form-control input-sm mtd-status-filter" id="mtd-status-filter">
+							<option value="">${__("All Statuses")}</option>
+							<option value="Completed">${__("Completed")}</option>
+							<option value="Pending">${__("Pending")}</option>
+							<option value="Overdue">${__("Overdue")}</option>
+							<option value="In Progress">${__("In Progress")}</option>
+							<option value="Failed">${__("Failed")}</option>
+						</select>
+					</div>
+					<div id="mtd-trainings-body"></div>
 				</div>
 
 				<div class="mtd-card mtd-leaderboard-card mtd-accent-violet">
@@ -145,6 +156,22 @@ class MyTrainingDashboard {
 				</div>
 			</div>
 		`);
+
+		this._lastData = data;
+		this.render_trainings_table();
+		this.$root.find("#mtd-status-filter").on("change", (e) => {
+			this.trainingStatusFilter = e.target.value;
+			this.render_trainings_table();
+		});
+	}
+
+	render_trainings_table() {
+		let rows = this._lastData.all_trainings.slice();
+		if (this.trainingStatusFilter) {
+			rows = rows.filter((r) => r.status === this.trainingStatusFilter);
+		}
+		this.$root.find("#mtd-trainings-count").text(`(${rows.length}${rows.length !== this._lastData.all_trainings.length ? ` / ${this._lastData.all_trainings.length}` : ""})`);
+		this.$root.find("#mtd-trainings-body").html(this.my_trainings_table(rows));
 	}
 
 	trend_chart(trend) {
@@ -152,33 +179,55 @@ class MyTrainingDashboard {
 			return `<div class="mtd-empty-small">${__("Not enough graded attempts yet to show a trend (need at least 2).")}</div>`;
 		}
 
-		const width = 640;
-		const height = 160;
-		const padX = 30;
-		const padY = 20;
+		const width = 680;
+		const height = 220;
+		const padLeft = 38;
+		const padRight = 16;
+		const padTop = 28;
+		const padBottom = 30;
+		const plotW = width - padLeft - padRight;
+		const plotH = height - padTop - padBottom;
 		const n = trend.length;
-		const xStep = (width - padX * 2) / (n - 1);
-		const yFor = (score) => height - padY - (Math.min(100, Math.max(0, score)) / 100) * (height - padY * 2);
+		const xStep = n > 1 ? plotW / (n - 1) : 0;
+		const xFor = (i) => padLeft + i * xStep;
+		const yFor = (score) => padTop + plotH - (Math.min(100, Math.max(0, score)) / 100) * plotH;
 
-		const points = trend.map((t, i) => ({ x: padX + i * xStep, y: yFor(t.score), ...t }));
+		// Recessive y-axis gridlines + labels at fixed 0/25/50/75/100 -- a
+		// percentage scale, so the axis reads consistently regardless of
+		// this employee's actual score range.
+		const GRID_VALUES = [0, 25, 50, 75, 100];
+		const gridlines = GRID_VALUES.map(
+			(v) => `
+			<line x1="${padLeft}" y1="${yFor(v)}" x2="${width - padRight}" y2="${yFor(v)}" class="mtd-trend-grid" />
+			<text x="${padLeft - 8}" y="${yFor(v) + 4}" class="mtd-trend-axis-label" text-anchor="end">${v}</text>`
+		).join("");
+
+		const points = trend.map((t, i) => ({ x: xFor(i), y: yFor(t.score), ...t }));
 		const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
 		const dots = points
-			.map(
-				(p) =>
-					`<circle cx="${p.x}" cy="${p.y}" r="4" class="mtd-trend-dot ${p.passed ? "good" : "crit"}"><title>${frappe.utils.escape_html(p.date)}: ${p.score}%</title></circle>`
-			)
+			.map((p, i) => {
+				// Edge points anchor their value label away from the y-axis
+				// (start) / plot edge (end) instead of centering, so they never
+				// collide with the axis labels or get clipped off the side.
+				const anchor = i === 0 ? "start" : i === points.length - 1 ? "end" : "middle";
+				const labelX = anchor === "start" ? p.x + 6 : anchor === "end" ? p.x - 6 : p.x;
+				return `
+				<circle cx="${p.x}" cy="${p.y}" r="4.5" class="mtd-trend-dot ${p.passed ? "good" : "crit"}">
+					<title>${frappe.utils.escape_html(p.date)}: ${p.score}%</title>
+				</circle>
+				<text x="${labelX}" y="${p.y - 12}" class="mtd-trend-value-label" text-anchor="${anchor}">${p.score}%</text>
+				<text x="${p.x}" y="${height - padBottom + 18}" class="mtd-trend-axis-label" text-anchor="middle">${frappe.utils.escape_html(p.date)}</text>`;
+			})
 			.join("");
 
 		return `
-			<svg viewBox="0 0 ${width} ${height}" class="mtd-trend-svg">
-				<line x1="${padX}" y1="${yFor(70)}" x2="${width - padX}" y2="${yFor(70)}" class="mtd-trend-threshold" />
+			<svg viewBox="0 0 ${width} ${height}" class="mtd-trend-svg" preserveAspectRatio="xMidYMid meet">
+				${gridlines}
+				<line x1="${padLeft}" y1="${yFor(70)}" x2="${width - padRight}" y2="${yFor(70)}" class="mtd-trend-threshold" />
+				<text x="${width - padRight}" y="${yFor(70) - 5}" class="mtd-trend-threshold-label" text-anchor="end">${__("Target")} 70%</text>
 				<polyline points="${linePoints}" class="mtd-trend-line" />
 				${dots}
 			</svg>
-			<div class="mtd-trend-labels">
-				<span>${frappe.utils.escape_html(trend[0].date)}</span>
-				<span>${frappe.utils.escape_html(trend[trend.length - 1].date)}</span>
-			</div>
 		`;
 	}
 
@@ -212,39 +261,45 @@ class MyTrainingDashboard {
 		`;
 	}
 
-	todo_table(todo) {
-		if (!todo || !todo.length) {
-			return `<div class="mtd-empty-small">${__("Nothing pending — you're all caught up.")}</div>`;
+	my_trainings_table(rows) {
+		if (!rows || !rows.length) {
+			return `<div class="mtd-empty-small">${__("No trainings match this filter.")}</div>`;
 		}
 		const statusClass = (status) => {
 			const s = (status || "").toLowerCase();
 			if (s === "overdue" || s === "failed") return "crit";
 			if (s === "pending" || s === "in progress") return "warn";
+			if (s === "completed") return "good";
 			return "neutral";
 		};
-		const rows = todo
-			.map(
-				(t) => `
+		const body = rows
+			.map((t) => {
+				const isCompleted = (t.status || "").toLowerCase() === "completed";
+				return `
 				<tr>
 					<td>${frappe.utils.escape_html(t.document || "")}</td>
 					<td><span class="mtd-status-badge ${statusClass(t.status)}">${frappe.utils.escape_html(t.status || "")}</span></td>
-					<td>${t.due_date ? frappe.datetime.str_to_user(t.due_date) : "—"}</td>
-					<td><a class="btn btn-xs btn-primary" href="/app/dms-training-record/${encodeURIComponent(t.training_record || "")}" title="${__("Open the training record, then click \"Sign My Acknowledgement\" to attend the quiz")}">${__("Go")}</a></td>
-				</tr>`
-			)
+					<td>${t.assessment_score !== null && t.assessment_score !== undefined ? t.assessment_score + "%" : "—"}</td>
+					<td>${isCompleted ? (t.completion_date || "—") : (t.due_date || "—")}</td>
+					<td><a class="btn btn-xs btn-primary" href="/app/dms-training-record/${encodeURIComponent(t.training_record || "")}" title="${__("Open the training record")}">${__("Go")}</a></td>
+				</tr>`;
+			})
 			.join("");
 		return `
-			<table class="table mtd-table">
-				<thead>
-					<tr>
-						<th>${__("Document")}</th>
-						<th>${__("Status")}</th>
-						<th>${__("Due Date")}</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>${rows}</tbody>
-			</table>
+			<div class="mtd-scroll-table">
+				<table class="table mtd-table">
+					<thead>
+						<tr>
+							<th>${__("Document")}</th>
+							<th>${__("Status")}</th>
+							<th>${__("Score")}</th>
+							<th>${__("Date")}</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>${body}</tbody>
+				</table>
+			</div>
 		`;
 	}
 
@@ -322,6 +377,21 @@ class MyTrainingDashboard {
 				gap: 8px;
 			}
 			.mtd-title-icon { width: 15px; height: 15px; color: var(--text-muted); flex: 0 0 auto; }
+			.mtd-card-title-row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				margin-bottom: 14px;
+				flex-wrap: wrap;
+				gap: 8px;
+			}
+			.mtd-card-title-row .mtd-card-title { margin-bottom: 0; }
+			.mtd-count { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+			.mtd-status-filter { width: 150px; height: 26px; font-size: 12.5px; }
+			.mtd-scroll-table { max-height: 300px; overflow-y: auto; }
+			.mtd-scroll-table::-webkit-scrollbar { width: 8px; }
+			.mtd-scroll-table::-webkit-scrollbar-track { background: var(--border-color, #e1e1e1); border-radius: 4px; }
+			.mtd-scroll-table::-webkit-scrollbar-thumb { background: #1f4e79; border-radius: 4px; }
 			.mtd-gauge-card { display: flex; flex-direction: column; align-items: center; }
 			.mtd-gauge-wrap { position: relative; width: 220px; }
 			.mtd-gauge { width: 100%; }
@@ -373,6 +443,7 @@ class MyTrainingDashboard {
 			}
 			.mtd-status-badge.crit { background: rgba(208,59,59,0.12); color: #d03b3b; }
 			.mtd-status-badge.warn { background: rgba(250,178,25,0.18); color: #8a6100; }
+			.mtd-status-badge.good { background: rgba(12,163,12,0.12); color: #0ca30c; }
 			.mtd-status-badge.neutral { background: rgba(31,78,121,0.1); color: #1f4e79; }
 			.mtd-medal {
 				display: inline-flex;
@@ -425,18 +496,16 @@ class MyTrainingDashboard {
 			}
 			.mtd-trend-stat-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: #1f4e79; }
 			.mtd-trend-stat-label { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
-			.mtd-trend-svg { width: 100%; height: 160px; }
+			.mtd-trend-svg { width: 100%; height: 220px; }
 			.mtd-trend-line { fill: none; stroke: #1f4e79; stroke-width: 2; }
-			.mtd-trend-threshold { stroke: var(--border-color, #e1e1e1); stroke-width: 1; stroke-dasharray: 4 3; }
+			.mtd-trend-grid { stroke: var(--border-color, #e1e1e1); stroke-width: 1; opacity: 0.6; }
+			.mtd-trend-threshold { stroke: #d03b3b; stroke-width: 1.2; stroke-dasharray: 4 3; opacity: 0.7; }
+			.mtd-trend-threshold-label { font-size: 10px; fill: #d03b3b; opacity: 0.85; }
+			.mtd-trend-dot { stroke: #fff; stroke-width: 1.5; }
 			.mtd-trend-dot.good { fill: #0ca30c; }
 			.mtd-trend-dot.crit { fill: #d03b3b; }
-			.mtd-trend-labels {
-				display: flex;
-				justify-content: space-between;
-				font-size: 11px;
-				color: var(--text-muted);
-				margin-top: 4px;
-			}
+			.mtd-trend-value-label { font-size: 11px; font-weight: 700; fill: var(--text-color, #17212b); }
+			.mtd-trend-axis-label { font-size: 10.5px; fill: var(--text-muted); }
 		`;
 	}
 }
