@@ -1,5 +1,7 @@
 import frappe
+from frappe.model.delete_doc import check_if_doc_is_dynamically_linked, check_if_doc_is_linked
 from frappe.utils import now_datetime
+from frappe.workflow.doctype.workflow_action.workflow_action import clear_workflow_actions
 
 _ALLOWED_SIGN_DOCTYPES = {"Document Library", "DMS Training Record"}
 
@@ -163,6 +165,63 @@ def log_audit_event(doc, method):
     }
 
     _insert_audit_log(action=action, document=doc.name, document_snapshot=snapshot)
+
+
+@frappe.whitelist()
+def force_delete_document(document_name):
+    """Admin-only escape hatch: delete a Document Library record at any
+    workflow stage, including Published. Frappe core refuses to hard-delete
+    a docstatus=1 record, and this doctype's workflow only offers "Mark as
+    Obsolete"/"Archive" from Published -- no path back to a cancellable
+    state -- so a plain Cancel-then-Delete is not reachable from the UI.
+    This bypasses only that workflow-stage restriction; real link
+    dependencies from other documents are still enforced, and the deletion
+    is still explicitly audited (see log_audit_event's on_trash path, which
+    this does not rely on -- the audit row is written here, before the
+    document is gone, so it never depends on a hook firing after the fact).
+    """
+    if not ({"DMS Admin", "System Manager"} & set(frappe.get_roles())):
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    doc = frappe.get_doc("Document Library", document_name)
+
+    # Workflow Action rows are the workflow engine's own bookkeeping (one per
+    # transition/notification), not a real business dependency -- without
+    # clearing them first, check_if_doc_is_linked would block every workflow-
+    # governed document that has ever been actioned, which is all of them.
+    clear_workflow_actions(doc.doctype, doc.name)
+
+    check_if_doc_is_linked(doc, method="Delete")
+    check_if_doc_is_dynamically_linked(doc, method="Delete")
+
+    snapshot = {
+        "title": doc.title,
+        "department": doc.department,
+        "category": doc.category,
+        "version": doc.version,
+        "number": doc.document_number,
+        "file": doc.file,
+    }
+
+    try:
+        if doc.docstatus == 1:
+            frappe.db.set_value(
+                "Document Library", doc.name, "docstatus", 2, update_modified=False
+            )
+
+        _insert_audit_log(
+            action="Deleted (Force Delete)",
+            document=doc.name,
+            document_snapshot=snapshot,
+        )
+
+        frappe.delete_doc("Document Library", doc.name, ignore_permissions=True, force=True)
+    except Exception:
+        frappe.db.rollback()
+        raise
+
+    frappe.db.commit()
+    return {"deleted": document_name}
 
 
 def log_request_audit_event(doc, method):
