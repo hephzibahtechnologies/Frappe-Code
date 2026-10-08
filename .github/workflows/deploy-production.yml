@@ -30,6 +30,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
+            set -o pipefail
             IMAGE_TAG="${{ inputs.image_tag }}"
             IMAGE="${{ env.REGISTRY }}/${{ env.APP_IMAGE_NAME }}:${IMAGE_TAG}"
             cd /home/david/frappe-crm
@@ -62,7 +63,9 @@ jobs:
             done
 
             echo "=== Running bench migrate (schema/patches — do NOT skip, do NOT run manually on the server) ==="
-            docker exec crm-backend-1 bench --site all migrate
+            echo "=== (scoped to mysite.local, not 'all' — unrelated/broken sites on this box must not fail this job) ==="
+            echo "=== (piped through tr to flatten the progress bar's \r output — appleboy/ssh-action mis-parses raw \r and can report a false failure even when migrate succeeds) ==="
+            docker exec crm-backend-1 bench --site mysite.local migrate 2>&1 | tr '\r' '\n'
 
             echo "=== Force-reimporting DMS Workspace/Number Card/Dashboard Chart/Sidebar fixtures ==="
             echo "=== (bench migrate does NOT overwrite these once they exist in the DB — see quality_dms dashboard incident 2026-07-28) ==="
@@ -87,8 +90,8 @@ jobs:
             done
 
             echo "=== Clearing Frappe cache (avoid stale asset-hash HTML) ==="
-            docker exec crm-backend-1 bench --site all clear-cache || true
-            docker exec crm-backend-1 bench --site all clear-website-cache || true
+            docker exec crm-backend-1 bench --site mysite.local clear-cache || true
+            docker exec crm-backend-1 bench --site mysite.local clear-website-cache || true
 
             echo "=== Pruning old crm-deploy tags (keep current) ==="
             docker images crm-deploy --format '{{.Tag}}' \
