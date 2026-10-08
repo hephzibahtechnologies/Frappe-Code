@@ -29,15 +29,35 @@ html:not([data-theme='dark']) .crm-desk-canvas .widget {
   border: 1px solid var(--border-color);
 }
 
-/* KPI Number Cards: a single, consistent accent (the same #2563EB already
-   used for the sidebar's active-nav state, not a new color) via the
-   dedicated .number-widget-box class every Number Card carries -- this
-   targets all 4 KPI cards as a group without touching Dashboard Charts
-   (.dashboard-widget-box, a different class) or any per-card data-widget-name
-   string. Kept to one color deliberately, not four, per instruction to stay
-   within the existing navy/blue system rather than a multi-color KPI set. */
+/* KPI Number Cards: each card gets its own accent, keyed by the stable
+   data-widget-name attribute every widget carries (base_widget.js) --
+   set to the Number Card's own `name`/label, so this never touches
+   Dashboard Charts (.dashboard-widget-box, a different class). The 6
+   hex values match each card's native `color` field (set server-side on
+   the Number Card doc, number_card_widget.js already tints the big
+   number with it) so the border and the number read as one color per
+   card, not two different systems. Semantics: green = won, amber = open/
+   pending, red = lost, blue/teal/violet for the rest -- not arbitrary. */
 html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box {
   border-left: 3px solid #2563eb;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box[data-widget-name="New Lead (Last 1 Month)"] {
+  border-left-color: #2563eb;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box[data-widget-name="New Opportunity (Last 1 Month)"] {
+  border-left-color: #0d9488;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box[data-widget-name="Won Opportunity (Last 1 Month)"] {
+  border-left-color: #16a34a;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box[data-widget-name="Open Opportunity"] {
+  border-left-color: #d97706;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box[data-widget-name="Total Customers"] {
+  border-left-color: #7c3aed;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box[data-widget-name="Lost Opportunities"] {
+  border-left-color: #dc2626;
 }
 
 /* Number Card hierarchy: mute the label relative to the value using
@@ -58,11 +78,34 @@ html:not([data-theme='dark']) .body-sidebar-container.crm-desk-sidebar {
   --ink-gray-6: #cbd5e1;
   --ink-gray-8: #e2e8f0;
   --surface-gray-3: #1e3a5f;
+  /* Nav item labels already render at --ink-gray-8 (#e2e8f0, good contrast
+     on navy). The icons next to them did not: every sidebar icon svg is
+     `stroke="currentColor"` with class `text-ink-gray-7` (confirmed live,
+     not assumed), so its color comes from --ink-gray-7, not --icon-stroke
+     (that var is set too, for any icon elsewhere using the icons.scss
+     svg.icon rule instead). --ink-gray-7 defaults to #525252 -- tuned for
+     a white/light sidebar, nearly invisible on navy. Matching both to the
+     same #e2e8f0 as the text makes icon and label read as equally visible. */
+  --icon-stroke: #e2e8f0;
+  --ink-gray-7: #e2e8f0;
   /* .active-sidebar (sidebar.scss) always paints this as its background --
      a quiet tint instead of a solid block, paired with the left accent
-     border below instead of relying on the block alone for emphasis. */
-  --sidebar-active-color: rgba(37, 99, 235, 0.18);
-  --sidebar-hover-color: rgba(255, 255, 255, 0.06);
+     border below instead of relying on the block alone for emphasis.
+     Both tints darken the navy (black overlay) instead of lightening it
+     (the original white/bright-blue tints), per instruction to make the
+     hover effect and the selected/active item read darker. */
+  --sidebar-active-color: rgba(0, 0, 0, 0.32);
+  --sidebar-hover-color: rgba(0, 0, 0, 0.18);
+}
+
+/* "CRM" workspace-switcher title: .header-title (sidebar_header.scss) sets
+   no color of its own, so it was inheriting Desk's default body text color
+   (near-black, meant for a light page) straight through onto the navy
+   sidebar -- confirmed live via computed style, not assumed. Its sibling
+   .header-subtitle ("SBIQC") already used --ink-gray-6, which the block
+   above fixes, so only this explicit rule was missing. */
+html:not([data-theme='dark']) .crm-desk-sidebar .header-title {
+  color: #e2e8f0;
 }
 
 /* Active item: subtle left accent instead of an overly bright block. */
@@ -204,6 +247,17 @@ html:not([data-theme='dark']) .crm-desk-canvas .crm-chart-empty-state-subtitle {
   max-width: 280px;
 }
 
+/* F. KPI Overview grid: the native Number Card container is
+   .widget-group-body.grid-col-3 (desktop.scss), which auto-fills columns
+   at a 300px minimum -- enough room for only 4-5 of the 6 current KPI
+   cards before the 6th wraps to its own row. Forcing a fixed 6-column
+   grid keeps all 6 on one line at desktop widths; the responsive block
+   below steps that down at narrower widths instead of letting cards
+   shrink past readability. */
+html:not([data-theme='dark']) .crm-desk-canvas .widget-group-body.grid-col-3 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
 /* E. Responsive: at narrow widths the intro and section labels keep their
    own block-level flow (no absolute/fixed positioning anywhere in this
    file), so they already reflow correctly; this only tightens spacing so
@@ -215,4 +269,127 @@ html:not([data-theme='dark']) .crm-desk-canvas .crm-chart-empty-state-subtitle {
   html:not([data-theme='dark']) .crm-dashboard-intro {
     padding: 2px 2px 12px;
   }
+}
+
+@media (max-width: 1400px) {
+  html:not([data-theme='dark']) .crm-desk-canvas .widget-group-body.grid-col-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  html:not([data-theme='dark']) .crm-desk-canvas .widget-group-body.grid-col-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---- Chart chrome polish (Incoming Leads / Opportunity Trends / Won
+   Opportunities / Territory Wise Opportunity Count / Opportunities via
+   Campaigns) ----
+   Deliberately narrow: only axis/legend TEXT color, gridlines, and the
+   plain-HTML tooltip are touched. Bar/line/slice fill and legend-dot swatch
+   colors are never set here -- those are data colors, driven natively by
+   Dashboard Chart.color (erpnext/crm/dashboard_chart/*) for the 3
+   single-series charts, or frappe-charts' own default palette for the 2
+   multi-slice charts (see Phase 3 investigation note). Confirmed live via
+   computed styles before writing this block, not guessed: axis/legend text
+   already rendered as a dark slate (rgb(49,59,68)) and gridlines as a very
+   light grey (rgb(244,245,246)) -- both already close to this theme, so
+   the changes here are intentionally small nudges, not a redesign. */
+html:not([data-theme='dark']) .crm-desk-canvas .chart-container .x.axis text,
+html:not([data-theme='dark']) .crm-desk-canvas .chart-container .y.axis text {
+  fill: var(--text-muted);
+  font-family: inherit;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .chart-container .line-horizontal,
+html:not([data-theme='dark']) .crm-desk-canvas .chart-container .line-vertical {
+  stroke: #eef2f6;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .chart-container .chart-legend text {
+  fill: var(--text-muted);
+  font-size: 12px;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .graph-svg-tip {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(23, 37, 84, 0.12);
+}
+html:not([data-theme='dark']) .crm-desk-canvas .graph-svg-tip .title {
+  color: #1e3a5f;
+  font-weight: 600;
+}
+
+/* ---- Lead Form (and every other Form page under the CRM workspace --
+   .crm-desk-canvas already applies here, confirmed live, no JS change
+   needed) ----
+   Phase 0 findings this block relies on (confirmed via computed style,
+   not assumed):
+   - .form-control has `border: none` natively (common/form.scss) -- adding
+     a border here is additive, not an override fight.
+   - The required/invalid state is painted by
+     `.frappe-control.has-error input` (controls.scss) at ~(0,4,1)
+     specificity -- far above anything here, so it always wins and the red
+     error border/focus-ring is untouched by any rule below.
+   - The normal focus box-shadow comes from a plain `.form-control:focus`
+     rule (Bootstrap) at (0,2,0) -- our (0,3,0) selector safely overrides
+     only the non-error case. */
+
+/* Phase 1: section rhythm -- spacing/typography only, still a flat
+   divider model (no boxed cards), no grid/column/collapse change. */
+html:not([data-theme='dark']) .crm-desk-canvas .form-section.card-section {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .form-section .section-head {
+  font-weight: 600;
+  color: #1e3a5f;
+  letter-spacing: 0.01em;
+}
+
+/* Phase 2: input affordance -- subtle border + blue focus ring. Excludes
+   disabled/readonly so their native muted appearance is untouched.
+   `.frappe-control:not(.has-error)` on the ancestor is a structural
+   exclusion, not a specificity bet: verified live that despite this rule
+   scoring lower on paper than core's `.has-error input` rule, the error
+   state's red border/ring was still getting clobbered in practice, so
+   instead of relying on cascade math this rule simply never matches at
+   all while `.has-error` is present -- core's own error styling is the
+   only thing that can apply there, by construction. */
+html:not([data-theme='dark']) .crm-desk-canvas .frappe-control:not(.has-error) .form-control:not(:disabled):not([readonly]) {
+  border: 1px solid var(--border-color);
+}
+html:not([data-theme='dark']) .crm-desk-canvas .frappe-control:not(.has-error) .form-control:not(:disabled):not([readonly]):focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+/* Phase 3: active tab underline + collapsible section-head hover, both
+   using the same accent as the rest of the theme. Native sticky/collapse
+   behavior untouched. */
+html:not([data-theme='dark']) .crm-desk-canvas .form-tabs .nav-link.active {
+  border-bottom: 1px solid #2563eb;
+  color: #1e3a5f;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .section-head.collapsible:hover {
+  background-color: #f8fafc;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .section-head.collapsible:hover .collapse-indicator {
+  color: #2563eb;
+}
+
+/* Tighten the gap between the Overview (KPI) widget-group and the Activity
+   (charts) widget-group below it -- confirmed live that both are plain
+   .widget-group blocks with a native 40px margin-bottom (desktop.scss);
+   reduced here, not removed, so the sections still read as distinct. */
+html:not([data-theme='dark']) .crm-desk-canvas .widget-group {
+  margin-bottom: 16px;
+}
+
+/* Hides the "Dashboard" breadcrumb segment (which links to the generic
+   Dashboard doctype list, /desk/dashboard) specifically on the CRM
+   dashboard route -- toggled by crm_theme.js's apply_crm_dashboard_breadcrumb(),
+   which gates this on the exact route so no other dashboard (HR, Payroll,
+   etc.) is affected. Unscoped from html:not([data-theme='dark']) on
+   purpose: this removes a confusing navigation link, not a visual skin, so
+   it should behave the same in both light and dark mode. */
+.crm-hide-breadcrumb-segment {
+  display: none;
 }

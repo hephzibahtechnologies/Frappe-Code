@@ -287,6 +287,22 @@
 		crm_update_chart_empty_state(widget);
 	}
 
+	// The breadcrumb bar (.navbar-breadcrumbs) lives in the top navbar, a
+	// sibling of .page-container, not a descendant of .crm-desk-canvas -- so
+	// unlike every other phase this can't be scoped with a plain CSS
+	// selector from the canvas class. breadcrumbs.js's set_list_breadcrumb()
+	// builds a "Dashboard" link to /desk/dashboard (the generic Dashboard
+	// doctype list -- every HR/Payroll/etc dashboard gets the exact same
+	// link) for *every* dashboard-view route, so hiding it has to be done
+	// here, gated on the exact route, not just "any dashboard-view".
+	function apply_crm_dashboard_breadcrumb() {
+		var route = frappe.get_route();
+		var on_crm_dashboard = route[0] === "dashboard-view" && route[1] === "CRM";
+		$('.navbar-breadcrumbs a[href="/desk/dashboard"]')
+			.closest("li")
+			.toggleClass("crm-hide-breadcrumb-segment", on_crm_dashboard);
+	}
+
 	function apply_crm_chart_empty_states() {
 		// Guard independently of apply_crm_dashboard_enhancements's own check,
 		// since this also runs from standalone staggered timeouts (route
@@ -323,6 +339,11 @@
 		setTimeout(apply_crm_chart_empty_states, 600);
 		setTimeout(apply_crm_chart_empty_states, 1500);
 		setTimeout(apply_crm_chart_empty_states, 3000);
+		// frappe.breadcrumbs.update() runs synchronously as part of route
+		// handling, but a short follow-up retry costs nothing and matches
+		// the defensive pattern already used above for the same hook.
+		setTimeout(apply_crm_dashboard_breadcrumb, 0);
+		setTimeout(apply_crm_dashboard_breadcrumb, 300);
 	});
 	$(document).on("page-change", function () {
 		setTimeout(apply_crm_sidebar_theme, 0);
@@ -338,5 +359,7 @@
 		setTimeout(apply_crm_sidebar_theme, 800);
 		setTimeout(apply_crm_chart_empty_states, 1500);
 		setTimeout(apply_crm_chart_empty_states, 3000);
+		setTimeout(apply_crm_dashboard_breadcrumb, 0);
+		setTimeout(apply_crm_dashboard_breadcrumb, 800);
 	});
 })();

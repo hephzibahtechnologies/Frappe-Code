@@ -1,4 +1,5 @@
 {
+ "color": "#16a34a",
  "creation": "2020-07-20 20:17:15.922486",
  "docstatus": 0,
  "doctype": "Number Card",
@@ -10,12 +11,13 @@
  "is_public": 1,
  "is_standard": 1,
  "label": "Won Opportunity (Last 1 Month)",
- "modified": "2024-12-05 12:00:00.000000",
+ "modified": "2026-10-08 05:28:07.649946",
  "modified_by": "Administrator",
  "module": "CRM",
  "name": "Won Opportunity (Last 1 Month)",
  "owner": "Administrator",
- "show_percentage_stats": 1,
+ "show_full_number": 0,
+ "show_percentage_stats": 0,
  "stats_time_interval": "Daily",
  "type": "Document Type"
 }

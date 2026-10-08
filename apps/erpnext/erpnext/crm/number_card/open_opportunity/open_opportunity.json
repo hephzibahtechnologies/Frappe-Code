@@ -1,4 +1,5 @@
 {
+ "color": "#d97706",
  "creation": "2020-07-20 20:17:15.948113",
  "docstatus": 0,
  "doctype": "Number Card",
@@ -10,13 +11,13 @@
  "is_public": 1,
  "is_standard": 1,
  "label": "Open Opportunity",
- "modified": "2025-06-24 11:10:17.468713",
+ "modified": "2026-10-08 05:28:07.655721",
  "modified_by": "Administrator",
  "module": "CRM",
  "name": "Open Opportunity",
  "owner": "Administrator",
  "show_full_number": 0,
- "show_percentage_stats": 1,
+ "show_percentage_stats": 0,
  "stats_time_interval": "Daily",
  "type": "Document Type"
 }
