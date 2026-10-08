@@ -1,0 +1,218 @@
+/* SBIQC Professional theme for the Desk "CRM" workspace only.
+   Scoped two ways:
+   - Canvas: .crm-desk-canvas, toggled by crm_theme.js. The dashboard-view
+     page-container is a single DOM element reused by every workspace that
+     uses the Dashboard view type -- data-page-route is just "dashboard-view"
+     regardless of which workspace is showing (confirmed live, not assumed),
+     so it can't be scoped by a static CSS attribute selector. --bg-color and
+     --card-bg are separate variables in Desk's token system (unlike the
+     Frappe CRM SPA's shared --surface-white), so cards/widgets stay white
+     automatically -- no extra workaround needed for that part.
+   - Sidebar: .crm-desk-sidebar, toggled by crm_theme.js only when the
+     resolved workspace sidebar is "CRM" (the sidebar DOM is a single
+     persistent element shared by every workspace too). --surface-menu-bar is
+     sidebar-only in core Desk SCSS
+     (apps/frappe/frappe/public/scss/desk/sidebar.scss), so this doesn't leak
+     into any other panel.
+   Both scoped to light mode only, matching Desk's own dark-mode selector
+   ([data-theme="dark"], apps/frappe/frappe/public/scss/desk/dark.scss). */
+
+html:not([data-theme='dark']) .page-container.crm-desk-canvas {
+  --bg-color: #f1f5f9;
+}
+
+/* Subtle separation between the canvas and native widgets -- reuses Desk's
+   own --border-color token (the same one backing the existing, unused-here
+   `.widget.border` modifier in desktop.scss) rather than inventing a color.
+   No dashboard/chart internals touched. */
+html:not([data-theme='dark']) .crm-desk-canvas .widget {
+  border: 1px solid var(--border-color);
+}
+
+/* KPI Number Cards: a single, consistent accent (the same #2563EB already
+   used for the sidebar's active-nav state, not a new color) via the
+   dedicated .number-widget-box class every Number Card carries -- this
+   targets all 4 KPI cards as a group without touching Dashboard Charts
+   (.dashboard-widget-box, a different class) or any per-card data-widget-name
+   string. Kept to one color deliberately, not four, per instruction to stay
+   within the existing navy/blue system rather than a multi-color KPI set. */
+html:not([data-theme='dark']) .crm-desk-canvas .number-widget-box {
+  border-left: 3px solid #2563eb;
+}
+
+/* Number Card hierarchy: mute the label relative to the value using
+   Frappe's own --text-muted token. Targets the card's existing
+   .widget-title/.number classes (number_card_widget.js) -- no markup or
+   component change. */
+html:not([data-theme='dark']) .crm-desk-canvas .widget-title {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .number {
+  font-weight: 600;
+}
+
+html:not([data-theme='dark']) .body-sidebar-container.crm-desk-sidebar {
+  --surface-menu-bar: #172554;
+  --ink-gray-5: #94a3b8;
+  --ink-gray-6: #cbd5e1;
+  --ink-gray-8: #e2e8f0;
+  --surface-gray-3: #1e3a5f;
+  /* .active-sidebar (sidebar.scss) always paints this as its background --
+     a quiet tint instead of a solid block, paired with the left accent
+     border below instead of relying on the block alone for emphasis. */
+  --sidebar-active-color: rgba(37, 99, 235, 0.18);
+  --sidebar-hover-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Active item: subtle left accent instead of an overly bright block. */
+html:not([data-theme='dark']) .crm-desk-sidebar .active-sidebar {
+  box-shadow: none;
+  border-left: 2px solid #2563eb;
+  border-radius: 0 8px 8px 0;
+}
+html:not([data-theme='dark']) .crm-desk-sidebar .active-sidebar .item-anchor {
+  margin-left: -2px;
+}
+
+/* Section labels (Reports / Maintenance / Sales Pipeline / Setup / ...) read
+   as a distinct, quieter tier under the primary items above --
+   .section-break already uses --ink-gray-5 (now muted blue-gray); this adds
+   weight/spacing so it reads as a deliberate section header, not a 5th nav
+   item. */
+html:not([data-theme='dark']) .crm-desk-sidebar .section-break {
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* Sidebar bottom: give the "Switch to CRM" / user footer area a visible,
+   intentional boundary instead of trailing off the nav list, and make sure
+   text stays readable -- .sidebar-user-button and its .text-secondary email
+   span (sidebar.html) are plain Bootstrap classes with their own hardcoded
+   colors, not Frappe's --ink-gray-* tokens, so they need an explicit
+   override here independent of the --ink-gray overrides above. */
+html:not([data-theme='dark']) .crm-desk-sidebar .body-sidebar-bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 6px;
+  padding-top: 8px;
+}
+html:not([data-theme='dark']) .crm-desk-sidebar .promotional-banner,
+html:not([data-theme='dark']) .crm-desk-sidebar .onboarding-sidebar,
+html:not([data-theme='dark']) .crm-desk-sidebar .sidebar-user-button {
+  border-radius: 8px;
+  color: #e2e8f0;
+}
+html:not([data-theme='dark']) .crm-desk-sidebar .promotional-banner:hover,
+html:not([data-theme='dark']) .crm-desk-sidebar .onboarding-sidebar:hover,
+html:not([data-theme='dark']) .crm-desk-sidebar .sidebar-user-button:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+}
+html:not([data-theme='dark']) .crm-desk-sidebar .sidebar-user-button .text-secondary {
+  color: #94a3b8 !important;
+}
+
+/* ---- Dashboard enhancements (crm_theme.js inserts these as siblings,
+   never wrapping/reparenting the native WidgetGroup DOM) ---- */
+
+/* A. Intro/greeting -- compact, no card/border, sits directly on the canvas
+   like a page lead-in rather than a boxed SaaS widget. */
+html:not([data-theme='dark']) .crm-dashboard-intro {
+  padding: 4px 4px 16px;
+}
+html:not([data-theme='dark']) .crm-dashboard-intro-greeting {
+  font-size: 18px;
+  font-weight: 600;
+  color: #172554;
+  line-height: 1.3;
+}
+html:not([data-theme='dark']) .crm-dashboard-intro-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* D. Section labels -- same typographic language as the sidebar's own
+   .section-break (uppercase, letter-spaced, muted) for visual continuity
+   between the nav and the canvas, not a separate style invented here. */
+html:not([data-theme='dark']) .crm-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #1e3a5f;
+  margin: 20px 4px 8px;
+}
+html:not([data-theme='dark']) .crm-section-label:first-of-type {
+  margin-top: 4px;
+}
+
+/* B. Quick Action buttons -- native page.add_button() output (plain
+   .btn.btn-default), only the color/radius is adjusted to match the theme;
+   no new button component. */
+html:not([data-theme='dark']) .crm-desk-canvas .crm-quick-action-btn {
+  border-color: #cbd5e1;
+  color: #1e3a5f;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .crm-quick-action-btn:hover {
+  background-color: #eff6ff;
+  border-color: #2563eb;
+  color: #1e40af;
+}
+
+/* Chart empty-state overlay (Incoming Leads / Opportunity Trends / Won
+   Opportunities only, applied in crm_theme.js). Absolutely positioned over
+   the chart's own .widget-body deliberately: chart_wrapper's own visibility
+   is never touched by the JS (ChartWidget.render() calls chart_wrapper.show()
+   unconditionally whenever the data has a valid shape, even if every value
+   is zero -- fighting that with our own .hide()/.show() calls would race
+   every native re-render), so this overlay sits on top instead, toggled only
+   by our own data check. This is the one deliberate exception to "no
+   absolute positioning" in this file, used only because the non-destructive
+   overlay was the explicitly safer alternative to touching chart_wrapper's
+   own state. */
+html:not([data-theme='dark']) .crm-desk-canvas .dashboard-widget-box .widget-body {
+  position: relative;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .crm-chart-empty-state {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+  background-color: #ffffff;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .crm-chart-empty-state-icon {
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .crm-chart-empty-state-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e3a5f;
+}
+html:not([data-theme='dark']) .crm-desk-canvas .crm-chart-empty-state-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  max-width: 280px;
+}
+
+/* E. Responsive: at narrow widths the intro and section labels keep their
+   own block-level flow (no absolute/fixed positioning anywhere in this
+   file), so they already reflow correctly; this only tightens spacing so
+   they don't look oversized on a cramped viewport. */
+@media (max-width: 640px) {
+  html:not([data-theme='dark']) .crm-dashboard-intro-greeting {
+    font-size: 16px;
+  }
+  html:not([data-theme='dark']) .crm-dashboard-intro {
+    padding: 2px 2px 12px;
+  }
+}
