@@ -68,8 +68,8 @@ fixtures = [
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/crm_unify/css/crm_theme.css"
-app_include_js = "/assets/crm_unify/js/crm_theme.js"
+app_include_css = "/assets/crm_unify/css/crm_theme.css?v=2"
+app_include_js = "/assets/crm_unify/js/crm_theme.js?v=2"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/crm_unify/css/crm_unify.css"

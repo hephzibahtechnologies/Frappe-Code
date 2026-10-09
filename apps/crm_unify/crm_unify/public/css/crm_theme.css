@@ -74,6 +74,13 @@ html:not([data-theme='dark']) .crm-desk-canvas .number {
 
 html:not([data-theme='dark']) .body-sidebar-container.crm-desk-sidebar {
   --surface-menu-bar: #172554;
+  /* Newer Frappe builds paint .body-sidebar from --desk-sidebar-bg (not
+     --surface-menu-bar), the active item from --surface-elevation-3 and the
+     hover from --surface-gray-2. Scoped to this container so nothing else
+     changes; without these the sidebar stays light under light text. */
+  --desk-sidebar-bg: #172554;
+  --surface-elevation-3: rgba(0, 0, 0, 0.32);
+  --surface-gray-2: rgba(0, 0, 0, 0.18);
   --ink-gray-5: #94a3b8;
   --ink-gray-6: #cbd5e1;
   --ink-gray-8: #e2e8f0;
