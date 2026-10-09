@@ -298,9 +298,19 @@
 	function apply_crm_dashboard_breadcrumb() {
 		var route = frappe.get_route();
 		var on_crm_dashboard = route[0] === "dashboard-view" && route[1] === "CRM";
-		$('.navbar-breadcrumbs a[href="/desk/dashboard"]')
-			.closest("li")
-			.toggleClass("crm-hide-breadcrumb-segment", on_crm_dashboard);
+		// Matched by label, not href: newer Frappe builds no longer link this
+		// crumb to /desk/dashboard, so an href selector finds nothing. The last
+		// crumb is the page itself and is never hidden.
+		var $crumbs = $(".navbar-breadcrumbs li");
+		$crumbs.removeClass("crm-hide-breadcrumb-segment");
+		if (on_crm_dashboard) {
+			$crumbs
+				.not(":last-child")
+				.filter(function () {
+					return $.trim($(this).text()) === __("Dashboard");
+				})
+				.addClass("crm-hide-breadcrumb-segment");
+		}
 	}
 
 	function apply_crm_chart_empty_states() {

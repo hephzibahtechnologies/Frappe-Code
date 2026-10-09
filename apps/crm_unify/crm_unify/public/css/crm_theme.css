@@ -400,3 +400,8 @@ html:not([data-theme='dark']) .crm-desk-canvas .widget-group {
 .crm-hide-breadcrumb-segment {
   display: none;
 }
+/* Frappe draws the "/" separator on every li that follows another li, so the
+   crumb after a hidden one would start with a stray slash. */
+.crm-hide-breadcrumb-segment + li:before {
+  display: none;
+}
