@@ -17,7 +17,7 @@
 	}).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 	function apply_crm_sidebar_theme() {
-		var is_crm = frappe.app && frappe.app.sidebar && frappe.app.sidebar.sidebar_title === "CRM";
+		var is_crm = frappe.app && frappe.app.sidebar && (frappe.app.sidebar.current_module || frappe.app.sidebar.sidebar_title) === "CRM";
 		$(".body-sidebar-container").toggleClass("crm-desk-sidebar", !!is_crm);
 
 		// Every page type (Dashboard, List, Form, Report, Setup) gets its own
@@ -165,7 +165,7 @@
 		if (!dashboard_observer_attached && $wrapper.get(0)) {
 			var observer = new MutationObserver(function () {
 				apply_crm_dashboard_enhancements(
-					frappe.app && frappe.app.sidebar && frappe.app.sidebar.sidebar_title === "CRM"
+					frappe.app && frappe.app.sidebar && (frappe.app.sidebar.current_module || frappe.app.sidebar.sidebar_title) === "CRM"
 				);
 			});
 			observer.observe($wrapper.get(0), { childList: true });
@@ -308,7 +308,7 @@
 		// since this also runs from standalone staggered timeouts (route
 		// change / document ready) that can fire after the user has already
 		// navigated away from the CRM dashboard.
-		var is_crm = frappe.app && frappe.app.sidebar && frappe.app.sidebar.sidebar_title === "CRM";
+		var is_crm = frappe.app && frappe.app.sidebar && (frappe.app.sidebar.current_module || frappe.app.sidebar.sidebar_title) === "CRM";
 		var route = frappe.get_route();
 		if (!is_crm || route[0] !== "dashboard-view") return;
 
