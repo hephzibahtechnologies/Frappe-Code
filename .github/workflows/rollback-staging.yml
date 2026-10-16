@@ -1,0 +1,102 @@
+name: Rollback Staging
+
+# Manual-only. Puts staging back on an earlier version, using the same tested
+# steps as a deploy (disk preflight, a fresh verified backup of the CURRENT
+# state first, pull by commit SHA, recreate, migrate, smoke checks) and records
+# the rollback in the "staging" deployment ledger.
+#
+# "previous" = the successful staging deployment before the one currently
+# running, read from the ledger (Repo -> Deployments -> staging).
+#
+# Code rollback only: the database is NOT restored. Data entered since the
+# version you are leaving stays. If a migration changed the schema, restoring a
+# backup is a separate, deliberate step (see the MANIFEST.txt in the backup
+# folder). Database restore is intentionally not part of this workflow yet.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "previous (default) or a 12-char/full commit SHA to roll back to"
+        required: false
+        default: "previous"
+      confirm:
+        description: "Type ROLLBACK to confirm"
+        required: true
+
+concurrency:
+  group: staging-server
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  deployments: write
+
+jobs:
+  resolve:
+    name: Resolve rollback target
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.r.outputs.sha }}
+    steps:
+      - name: Require typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "${CONFIRM}" != "ROLLBACK" ]; then
+            echo "Confirmation text must be exactly: ROLLBACK"
+            exit 1
+          fi
+
+      - name: Resolve target commit from the ledger
+        id: r
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          # Successful staging deployments, newest first. A deployment counts if it
+          # ever had a "success" status (older ones are later flipped to "inactive").
+          OK=()
+          for id in $(gh api "repos/${REPO}/deployments?environment=staging&per_page=30" --jq '.[].id'); do
+            if [ "$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq 'any(.[]; .state=="success")')" = "true" ]; then
+              OK+=("${id}")
+            fi
+          done
+          if [ "${#OK[@]}" -lt 1 ]; then
+            echo "The ledger has no successful staging deployment yet - nothing to roll back from."
+            exit 1
+          fi
+          CURRENT_SHA=$(gh api "repos/${REPO}/deployments/${OK[0]}" --jq .sha)
+          if [ -z "${TARGET}" ] || [ "${TARGET}" = "previous" ]; then
+            if [ "${#OK[@]}" -lt 2 ]; then
+              echo "The ledger has only one successful staging deployment (${CURRENT_SHA::12}); there is no previous version. Give an explicit commit SHA instead."
+              exit 1
+            fi
+            sha=$(gh api "repos/${REPO}/deployments/${OK[1]}" --jq .sha)
+          else
+            sha=$(gh api "repos/${REPO}/commits/${TARGET}" --jq .sha)
+          fi
+          if [ "${sha}" = "${CURRENT_SHA}" ]; then
+            echo "Staging is already running ${sha::12}; nothing to roll back."
+            exit 1
+          fi
+          echo "Currently running : ${CURRENT_SHA::12}"
+          echo "Rolling back to   : ${sha::12}"
+          {
+            echo "### Rollback plan"
+            echo "- Currently running: \`${CURRENT_SHA::12}\`"
+            echo "- Rolling back to: \`${sha::12}\`"
+            echo "- Code only; the database is not restored."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
+  rollback:
+    name: Rollback
+    needs: resolve
+    uses: ./.github/workflows/staging-core.yml
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
+      action: rollback
+    secrets: inherit
