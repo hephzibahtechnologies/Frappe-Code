@@ -3,6 +3,16 @@ name: Deploy to Staging
 # Manual-only, on purpose: this never runs on push. Pulls whatever image
 # tag was already built/pushed by the "Build & Push Images" workflow and
 # recreates the stack on 72.167.140.185. No rebuild happens here.
+#
+# Safety steps (run BEFORE anything on the server is changed — a failure in
+# any of them aborts the deploy with nothing touched):
+#   1. Preflight: enough free disk for the ~16 GB image (MIN_FREE_GB).
+#   2. Pre-deploy backup of mysite.local (database + public/private files) to
+#      /home/htipladmin/backups/crm/<UTC-time>_to-<tag>/ with a MANIFEST.txt
+#      naming the image that was running before this deploy. Newest 7 kept.
+#   Restore: see MANIFEST.txt; redeploy the "previous_tag"/digest it lists with
+#   this workflow, then `bench --site mysite.local restore <sql.gz>
+#   --with-public-files <files.tar> --with-private-files <private-files.tar>`.
 on:
   workflow_dispatch:
     inputs:
@@ -10,6 +20,11 @@ on:
         description: "Image tag to deploy (defaults to latest-staging)"
         required: false
         default: "latest-staging"
+      skip_backup:
+        description: "EMERGENCY ONLY: deploy without the pre-deploy backup (default false)"
+        required: false
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -38,9 +53,75 @@ jobs:
             echo "=== Logging in to GHCR ==="
             echo "${{ secrets.GHCR_PULL_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u "${{ secrets.STAGING_USER }}" --password-stdin
 
+            echo "=== Preflight: free disk space ==="
+            MIN_FREE_GB=25   # ~16 GB image + backup + headroom
+            FREE_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+            echo "Free on /: ${FREE_GB} GB (need >= ${MIN_FREE_GB} GB)"
+            if [ "${FREE_GB}" -lt "${MIN_FREE_GB}" ]; then
+              echo "ABORT: not enough free disk space — nothing has been changed. Free space (e.g. 'sudo docker image prune -f') and re-run."
+              exit 1
+            fi
+
             echo "=== Pulling ${IMAGE} ==="
             sudo docker pull "${IMAGE}"
             sudo docker tag "${IMAGE}" crm-deploy:${IMAGE_TAG}
+
+            if [ "${{ inputs.skip_backup }}" = "true" ]; then
+              echo "WARNING: skip_backup=true — deploying WITHOUT a pre-deploy backup."
+            else
+              echo "=== Pre-deploy backup (database + files) — nothing is changed until this succeeds ==="
+              BACKUP_ROOT=/home/htipladmin/backups/crm
+              KEEP=7
+              STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+              DEST="${BACKUP_ROOT}/${STAMP}_to-${IMAGE_TAG}"
+              PREV_TAG=$(grep '^CUSTOM_TAG=' .env | cut -d= -f2 || true)
+              PREV_IMAGE_ID=$(sudo docker inspect crm-backend-1 --format '{{.Image}}' 2>/dev/null || true)
+              if [ -z "${PREV_IMAGE_ID}" ]; then
+                echo "ABORT: crm-backend-1 is not running, so a backup cannot be taken. Nothing has been changed. Start it, or re-run with skip_backup=true if you accept deploying without a backup."
+                exit 1
+              fi
+
+              umask 077
+              mkdir -p "${DEST}"
+              OUT=$(sudo docker exec crm-backend-1 bench --site mysite.local backup --with-files 2>&1 | tr '\r' '\n')
+              echo "${OUT}"
+              FILES=$(echo "${OUT}" | grep -o '/[^ ]*/mysite.local/private/backups/[^ ]*' | sort -u || true)
+              if [ "$(echo "${FILES}" | grep -c .)" -lt 3 ]; then
+                echo "ABORT: bench backup did not report the expected files — nothing has been changed."
+                exit 1
+              fi
+              for f in ${FILES}; do
+                sudo docker cp "crm-backend-1:${f}" "${DEST}/"
+              done
+              sudo chown -R "$(id -u):$(id -g)" "${DEST}"
+              chmod -R go-rwx "${DEST}"
+
+              echo "--- verifying backup files ---"
+              gzip -t "${DEST}"/*-database.sql.gz
+              for t in "${DEST}"/*-files.tar; do tar -tf "$t" >/dev/null; done
+
+              {
+                echo "timestamp_utc=${STAMP}"
+                echo "deploy_target_tag=${IMAGE_TAG}"
+                echo "target_image_id=$(sudo docker image inspect "${IMAGE}" --format '{{.Id}}')"
+                echo "target_repo_digests=$(sudo docker image inspect "${IMAGE}" --format '{{join .RepoDigests ","}}')"
+                echo "previous_tag=${PREV_TAG}"
+                echo "previous_image_id=${PREV_IMAGE_ID}"
+                echo "previous_repo_digests=$(sudo docker image inspect "${PREV_IMAGE_ID}" --format '{{join .RepoDigests ","}}' 2>/dev/null || true)"
+                echo "workflow_run=${{ github.run_id }}"
+                echo "triggered_by=${{ github.actor }}"
+              } > "${DEST}/MANIFEST.txt"
+
+              # Backup is safely on the host and verified: drop this run's copies
+              # (absolute paths bench itself reported) inside the sites volume so they do not accumulate there too.
+              for f in ${FILES}; do
+                sudo docker exec crm-backend-1 rm -f "${f}"
+              done
+
+              # Retention: keep the newest ${KEEP} backup folders (name starts with the UTC stamp).
+              find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '2*T*Z_to-*' | sort | head -n -${KEEP} | xargs -r rm -rf
+              echo "Backup saved: ${DEST} ($(du -sh "${DEST}" | cut -f1))"
+            fi
 
             echo "=== Updating .env — same folder, same volumes, no data touched ==="
             sed -i "s/^CUSTOM_TAG=.*/CUSTOM_TAG=${IMAGE_TAG}/" .env
