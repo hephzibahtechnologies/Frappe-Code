@@ -28,7 +28,8 @@
   "certificate_file",
   "employee_verified_by",
   "employee_verified_date",
-  "employee_verification_notes"
+  "employee_verification_notes",
+  "remarks"
  ],
  "fields": [
   {
@@ -181,13 +182,19 @@
    "fieldtype": "Small Text",
    "label": "Verification Notes",
    "read_only": 1
+  },
+  {
+   "description": "Free-text remarks for this employee's training record (e.g. context for the Training Compliance Report) — distinct from the verifier-only Verification Notes above.",
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-13 00:00:00.000000",
+ "modified": "2026-10-12 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "DMS",
  "name": "Document Acknowledgement",

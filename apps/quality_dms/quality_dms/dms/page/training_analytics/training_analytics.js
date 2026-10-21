@@ -17,6 +17,9 @@ class TrainingAnalytics {
 		this.empEmployeeFilter = "";
 		this.empDeptFilter = "";
 		this.empSort = { key: "overall_score", dir: "desc" };
+		this.assessEmployeeFilter = "";
+		this.assessDeptFilter = "";
+		this.assessSort = { key: "date_of_completion", dir: "desc" };
 		this.pendEmployeeFilter = "";
 		this.pendDeptFilter = "";
 		this.pendSort = { key: "due_date_raw", dir: "asc" };
@@ -187,6 +190,26 @@ class TrainingAnalytics {
 					<div id="ta-emp-table-body"></div>
 				</div>
 
+				<div class="ta-card ta-dept-card ta-accent-blue">
+					<div class="ta-card-title-row">
+						<div class="ta-card-title">${icons.trend}${__("Assessment Scores")} <span class="ta-count" id="ta-assess-count"></span></div>
+						<div class="ta-table-tools">
+							<input type="text" class="form-control input-sm ta-filter-typeahead" id="ta-assess-employee-filter" list="ta-assess-employee-list" placeholder="${__("Type employee name...")}" autocomplete="off" />
+							<datalist id="ta-assess-employee-list">
+								${this._unique(data.assessment_scores, "employee_name").map((v) => `<option value="${frappe.utils.escape_html(v)}">`).join("")}
+							</datalist>
+							<input type="text" class="form-control input-sm ta-filter-typeahead" id="ta-assess-dept-filter" list="ta-assess-dept-list" placeholder="${__("Type department...")}" autocomplete="off" />
+							<datalist id="ta-assess-dept-list">
+								${this._unique(data.assessment_scores, "department").map((v) => `<option value="${frappe.utils.escape_html(v)}">`).join("")}
+							</datalist>
+							<button class="btn btn-xs btn-default ta-download" data-table="assessment_scores">${__("Download CSV")}</button>
+							<button class="btn btn-xs btn-default ta-download-excel">${__("Download Excel")}</button>
+						</div>
+					</div>
+					<div class="ta-empty-small ta-assess-note">${__("One row per graded assessment attempt. Remarks apply to the employee's training assignment as a whole, not to this specific attempt. Trainings with no quiz attached are not assessment attempts and appear in Employee Scores above instead.")}</div>
+					<div id="ta-assess-table-body"></div>
+				</div>
+
 				<div class="ta-card ta-dept-card ta-accent-amber">
 					<div class="ta-card-title-row">
 						<div class="ta-card-title">${icons.list}${__("Pending Trainings — All Employees")} <span class="ta-count" id="ta-pend-count"></span></div>
@@ -209,11 +232,15 @@ class TrainingAnalytics {
 
 		this._lastData = data;
 		this.render_employee_table();
+		this.render_assessment_table();
 		this.render_pending_table();
 
 		this.$content.find(".ta-download").on("click", (e) => {
 			const table = $(e.currentTarget).data("table");
 			this.download_csv(table);
+		});
+		this.$content.find(".ta-download-excel").on("click", () => {
+			this.download_excel();
 		});
 		this.$content.find("#ta-emp-employee-filter").on("input", (e) => {
 			this.empEmployeeFilter = e.target.value.toLowerCase();
@@ -222,6 +249,14 @@ class TrainingAnalytics {
 		this.$content.find("#ta-emp-dept-filter").on("input", (e) => {
 			this.empDeptFilter = e.target.value.toLowerCase();
 			this.render_employee_table();
+		});
+		this.$content.find("#ta-assess-employee-filter").on("input", (e) => {
+			this.assessEmployeeFilter = e.target.value.toLowerCase();
+			this.render_assessment_table();
+		});
+		this.$content.find("#ta-assess-dept-filter").on("input", (e) => {
+			this.assessDeptFilter = e.target.value.toLowerCase();
+			this.render_assessment_table();
 		});
 		this.$content.find("#ta-pend-employee-filter").on("input", (e) => {
 			this.pendEmployeeFilter = e.target.value.toLowerCase();
@@ -261,6 +296,43 @@ class TrainingAnalytics {
 			this.render_employee_table();
 		});
 		this.$content.find("#ta-emp-table-body .ta-emp-link").on("click", (e) => {
+			e.preventDefault();
+			const $el = $(e.currentTarget);
+			this.show_employee_trainings($el.data("employee"), $el.data("employee-name"));
+		});
+	}
+
+	// Shared by the table render and both exports (CSV + Excel) so the
+	// downloaded rows can never drift from what is actually on screen.
+	get_filtered_assessment_rows() {
+		let rows = this._lastData.assessment_scores.slice();
+		if (this.assessEmployeeFilter) {
+			rows = rows.filter((r) => (r.employee_name || "").toLowerCase().includes(this.assessEmployeeFilter));
+		}
+		if (this.assessDeptFilter) {
+			rows = rows.filter((r) => (r.department || "").toLowerCase().includes(this.assessDeptFilter));
+		}
+		const { key, dir } = this.assessSort;
+		rows.sort((a, b) => {
+			let av = a[key], bv = b[key];
+			if (av === null || av === undefined) av = dir === "asc" ? Infinity : -Infinity;
+			if (bv === null || bv === undefined) bv = dir === "asc" ? Infinity : -Infinity;
+			if (typeof av === "string") return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+			return dir === "asc" ? av - bv : bv - av;
+		});
+		return rows;
+	}
+
+	render_assessment_table() {
+		const rows = this.get_filtered_assessment_rows();
+		this.$content.find("#ta-assess-count").text(`(${rows.length}${rows.length !== this._lastData.assessment_scores.length ? ` / ${this._lastData.assessment_scores.length}` : ""})`);
+		this.$content.find("#ta-assess-table-body").html(this.assessment_scores_table(rows));
+		this.$content.find("#ta-assess-table-body [data-sort]").on("click", (e) => {
+			const sortKey = $(e.currentTarget).data("sort");
+			this.assessSort = { key: sortKey, dir: this.assessSort.key === sortKey && this.assessSort.dir === "desc" ? "asc" : "desc" };
+			this.render_assessment_table();
+		});
+		this.$content.find("#ta-assess-table-body .ta-emp-link").on("click", (e) => {
 			e.preventDefault();
 			const $el = $(e.currentTarget);
 			this.show_employee_trainings($el.data("employee"), $el.data("employee-name"));
@@ -458,6 +530,61 @@ class TrainingAnalytics {
 		`;
 	}
 
+	assessment_scores_table(rows) {
+		if (!rows || !rows.length) {
+			return `<div class="ta-empty-small">${__("No assessment attempts match your search.")}</div>`;
+		}
+		const resultClass = (result) => (result === "Pass" ? "good" : "poor");
+		const body = rows
+			.map(
+				(r) => `
+				<tr class="ta-row-accent-${resultClass(r.result)}">
+					<td>${r.sr_no}</td>
+					<td>${frappe.utils.escape_html(r.assessment_id)}</td>
+					<td>${frappe.utils.escape_html(r.training_title || "")}</td>
+					<td>${frappe.utils.escape_html(r.date_of_completion || "—")}</td>
+					<td>${frappe.utils.escape_html(r.employee_id || "")}</td>
+					<td><a href="#" class="ta-emp-link" data-employee="${frappe.utils.escape_html(r.employee_id)}" data-employee-name="${frappe.utils.escape_html(r.employee_name || r.employee_id)}">${frappe.utils.escape_html(r.employee_name || r.employee_id)}</a></td>
+					<td>${frappe.utils.escape_html(r.department)}</td>
+					<td>${frappe.utils.escape_html(r.trainer || "—")}</td>
+					<td>${r.maximum_marks}</td>
+					<td>${r.marks_obtained}</td>
+					<td>${r.score_pct}%</td>
+					<td>${r.pass_mark_pct}%</td>
+					<td><span class="ta-rate-badge ${resultClass(r.result)}">${r.result}</span></td>
+					<td title="${__("Applies to the training assignment, not this specific attempt")}">${frappe.utils.escape_html(r.remarks || "—")}</td>
+				</tr>`
+			)
+			.join("");
+		const sortTh = (label, key) =>
+			`<th class="ta-sortable${this.assessSort.key === key ? " ta-sort-active" : ""}" data-sort="${key}">${label}${this.sort_arrow(this.assessSort, key)}</th>`;
+		return `
+			<div class="ta-scroll-table">
+				<table class="table ta-table">
+					<thead>
+						<tr>
+							<th>${__("Sr. No.")}</th>
+							${sortTh(__("Assessment ID"), "assessment_id")}
+							${sortTh(__("Training Title"), "training_title")}
+							${sortTh(__("Date of completion"), "date_of_completion")}
+							<th>${__("Employee ID")}</th>
+							${sortTh(__("Employee Name"), "employee_name")}
+							${sortTh(__("Department"), "department")}
+							<th>${__("Trainer")}</th>
+							<th>${__("Maximum Marks")}</th>
+							${sortTh(__("Marks Obtained"), "marks_obtained")}
+							${sortTh(__("Score (%)"), "score_pct")}
+							<th>${__("Pass Mark (%)")}</th>
+							${sortTh(__("Result"), "result")}
+							<th title="${__("Applies to the training assignment, not the individual attempt")}">${__("Remarks")}</th>
+						</tr>
+					</thead>
+					<tbody>${body}</tbody>
+				</table>
+			</div>
+		`;
+	}
+
 	pending_trainings_table(rows) {
 		if (!rows || !rows.length) {
 			return `<div class="ta-empty-small">${__("No pending trainings match your search.")}</div>`;
@@ -520,6 +647,25 @@ class TrainingAnalytics {
 				rows.push([r.employee_name || r.employee, r.department, r.completed, r.total, r.completion_pct, r.overall_score ?? ""]);
 			});
 			filename = "employee_scores.csv";
+		} else if (table === "assessment_scores") {
+			// Uses the same filtered+sorted rows as the on-screen table (not
+			// the raw unfiltered _lastData list) so the download always
+			// matches what the user is actually looking at.
+			rows = [[
+				"Sr. No.", "Assessment ID", "Training Title", "Date of completion",
+				"Employee ID", "Employee Name", "Department", "Trainer",
+				"Maximum Marks", "Marks Obtained", "Score (%)", "Pass Mark (%)",
+				"Result (Pass/Fail)", "Remarks",
+			]];
+			this.get_filtered_assessment_rows().forEach((r) => {
+				rows.push([
+					r.sr_no, r.assessment_id, r.training_title || "", r.date_of_completion || "",
+					r.employee_id, r.employee_name || "", r.department || "", r.trainer || "",
+					r.maximum_marks, r.marks_obtained, r.score_pct, r.pass_mark_pct,
+					r.result, r.remarks || "",
+				]);
+			});
+			filename = "assessment_scores.csv";
 		} else if (table === "pending_trainings") {
 			rows = [["Employee", "Department", "Document", "Status", "Due Date"]];
 			this._lastData.pending_trainings.forEach((r) => {
@@ -539,6 +685,25 @@ class TrainingAnalytics {
 		a.download = filename;
 		a.click();
 		URL.revokeObjectURL(url);
+	}
+
+	download_excel() {
+		// Server-side export via Frappe's native make_xlsx (see
+		// api.export_assessment_scores) -- the same date/department filters
+		// plus the current employee/department typeahead text are passed
+		// through so the exported file matches the on-screen filtered table,
+		// not just the page-level date/department filters.
+		const params = {
+			from_date: this.filters.from_date || "",
+			to_date: this.filters.to_date || "",
+			department: this.filters.department || "",
+			employee_filter: this.assessEmployeeFilter || "",
+			department_filter: this.assessDeptFilter || "",
+		};
+		const url = frappe.urllib.get_full_url(
+			"/api/method/quality_dms.dms.api.export_assessment_scores?" + $.param(params)
+		);
+		window.open(url);
 	}
 
 	styles() {

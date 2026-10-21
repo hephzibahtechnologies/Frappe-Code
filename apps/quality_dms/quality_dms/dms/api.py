@@ -977,6 +977,168 @@ _SCORE_BUCKETS = [
 ]
 
 
+def _get_assessment_scores(from_date=None, to_date=None, department=None, employee_filter=None, department_filter=None):
+    """One row per recorded DMS Training Score History attempt -- a different
+    grain from employee_scores above (one row per employee), and a
+    deliberately separate result key rather than a repurposing of it: quiz-
+    less trainings never create a Score History row (record_score() in
+    dms_training_record.py is only called when a quiz was actually graded),
+    so this table structurally excludes every quiz-less completion.
+    employee_scores (built from Document Acknowledgement directly) remains
+    the only place that shows every assignment regardless of whether a quiz
+    was involved, and is intentionally left untouched for that reason."""
+    from quality_dms.dms.doctype.training_settings.training_settings import get_pass_percentage
+
+    conditions = ["1=1"]
+    values = {}
+    if department:
+        conditions.append("emp.department = %(department)s")
+        values["department"] = department
+    if from_date:
+        conditions.append("sh.recorded_on >= %(from_date)s")
+        values["from_date"] = from_date
+    if to_date:
+        conditions.append("sh.recorded_on <= %(to_date)s")
+        values["to_date"] = to_date
+    where = " AND ".join(conditions)
+
+    rows = frappe.db.sql(
+        f"""
+        SELECT
+            sh.name AS assessment_id,
+            sh.training_record AS training_record,
+            dl.title AS training_title,
+            sh.recorded_on AS date_of_completion,
+            sh.employee AS employee_id,
+            sh.employee_name AS employee_name,
+            emp.department AS department,
+            (
+                SELECT s.trainer
+                FROM `tabDMS Training Session` s
+                WHERE s.training_record = sh.training_record
+                ORDER BY s.session_datetime DESC, s.creation DESC
+                LIMIT 1
+            ) AS trainer,
+            sh.score AS score,
+            sh.quiz_passed AS quiz_passed,
+            dl.training_quiz AS training_quiz,
+            (
+                SELECT da.remarks
+                FROM `tabDocument Acknowledgement` da
+                WHERE da.parent = sh.training_record
+                    AND da.parenttype = 'DMS Training Record'
+                    AND da.employee = sh.employee
+                LIMIT 1
+            ) AS remarks
+        FROM `tabDMS Training Score History` sh
+        LEFT JOIN `tabDocument Library` dl ON dl.name = sh.document
+        LEFT JOIN `tabEmployee` emp ON emp.name = sh.employee
+        WHERE {where}
+        ORDER BY sh.recorded_on DESC
+        """,
+        values,
+        as_dict=True,
+    )
+
+    # Pass Mark (%) must replicate DMSQuiz.get_effective_pass_percentage()'s
+    # own fallback exactly (quiz.pass_percentage or the Training Settings
+    # default) -- cached per quiz name since many rows typically share one quiz.
+    pass_pct_cache = {}
+
+    def resolve_pass_percentage(quiz_name):
+        if not quiz_name:
+            return get_pass_percentage()
+        if quiz_name not in pass_pct_cache:
+            value = frappe.db.get_value("DMS Quiz", quiz_name, "pass_percentage")
+            pass_pct_cache[quiz_name] = value or get_pass_percentage()
+        return pass_pct_cache[quiz_name]
+
+    scores = []
+    for row in rows:
+        if employee_filter and employee_filter.lower() not in (row.employee_name or "").lower():
+            continue
+        if department_filter and department_filter.lower() not in (row.department or "Unassigned").lower():
+            continue
+        scores.append({
+            "assessment_id": row.assessment_id,
+            "training_record": row.training_record,
+            "training_title": row.training_title,
+            # Date of completion here is the individual assessment attempt's
+            # own timestamp (recorded_on), not Document Acknowledgement's
+            # completion_date -- that field only reflects the row's eventual
+            # successful sign-off and would misattribute an earlier failed
+            # attempt's date to a later passing one. Verified in
+            # dms_training_record.py: completion_date is set once, in
+            # _sync_progress(), only when acknowledged becomes true.
+            "date_of_completion": frappe.utils.format_datetime(row.date_of_completion) if row.date_of_completion else None,
+            "employee_id": row.employee_id,
+            "employee_name": row.employee_name,
+            "department": row.department or "Unassigned",
+            "trainer": row.trainer,
+            # Maximum Marks / Marks Obtained: the quiz engine (DMSQuiz.grade())
+            # computes real marks-weighted totals internally but only persists
+            # the final percentage -- total_marks/earned_marks are local
+            # variables in dms_quiz.py, never stored anywhere. Reconstructing
+            # them from the quiz's *current* questions would misrepresent
+            # history if the quiz was edited since the attempt. Per the
+            # confirmed business decision: Maximum Marks is always 100 (the
+            # scale the system actually persists), Marks Obtained is the
+            # same stored percentage as Score (%) -- not a separately
+            # persisted raw-mark value.
+            "maximum_marks": 100,
+            "marks_obtained": row.score,
+            "score_pct": row.score,
+            "pass_mark_pct": resolve_pass_percentage(row.training_quiz),
+            "result": "Pass" if row.quiz_passed else "Fail",
+            # Remarks live on Document Acknowledgement, one row per
+            # employee+training assignment (not per attempt) -- confirmed in
+            # dms_training_record.py: quiz_attempts increments on that same
+            # single row across retakes, so a value here is necessarily
+            # shared across every attempt for that assignment, not specific
+            # to this one.
+            "remarks": row.remarks,
+        })
+
+    for i, row in enumerate(scores, start=1):
+        row["sr_no"] = i
+
+    return scores
+
+
+@frappe.whitelist()
+def export_assessment_scores(from_date=None, to_date=None, department=None, employee_filter=None, department_filter=None):
+    """Export the assessment-attempt table as a native .xlsx file using
+    Frappe's own make_xlsx (no new dependency) -- reuses _get_assessment_scores
+    directly so the exported data/columns can never drift from the on-screen
+    table or the CSV export."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export training analytics.", frappe.PermissionError)
+
+    rows = _get_assessment_scores(from_date, to_date, department, employee_filter, department_filter)
+
+    headers = [
+        "Sr. No.", "Assessment ID", "Training Title", "Date of completion",
+        "Employee ID", "Employee Name", "Department", "Trainer",
+        "Maximum Marks", "Marks Obtained", "Score (%)", "Pass Mark (%)",
+        "Result (Pass/Fail)", "Remarks",
+    ]
+    xlsx_rows = [headers]
+    for r in rows:
+        xlsx_rows.append([
+            r["sr_no"], r["assessment_id"], r["training_title"] or "",
+            r["date_of_completion"] or "", r["employee_id"], r["employee_name"] or "",
+            r["department"] or "", r["trainer"] or "",
+            r["maximum_marks"], r["marks_obtained"], r["score_pct"], r["pass_mark_pct"],
+            r["result"], r["remarks"] or "",
+        ])
+
+    from frappe.desk.utils import provide_binary_file
+    from frappe.utils.xlsxutils import make_xlsx
+
+    xlsx_file = make_xlsx(xlsx_rows, "Assessment Scores")
+    provide_binary_file("Assessment Scores", "xlsx", xlsx_file.getvalue())
+
+
 @frappe.whitelist()
 def get_training_analytics(from_date=None, to_date=None, department=None):
     if not _is_admin_user():
@@ -1177,6 +1339,8 @@ def get_training_analytics(from_date=None, to_date=None, department=None):
         })
     employee_scores.sort(key=lambda r: (r["overall_score"] is None, -(r["overall_score"] or 0)))
 
+    assessment_scores = _get_assessment_scores(from_date, to_date, department)
+
     # ---- Every employee's pending/overdue trainings, org-wide (managers need
     # to see everyone's outstanding items, not just the aggregate rate) ----
     pending_conditions = ["da.status IN ('Pending', 'Overdue', 'In Progress', 'Failed')"]
@@ -1230,6 +1394,7 @@ def get_training_analytics(from_date=None, to_date=None, department=None):
         "completion_by_department": completion_by_department,
         "overdue_trend": overdue_trend,
         "employee_scores": employee_scores,
+        "assessment_scores": assessment_scores,
         "pending_trainings": pending_trainings,
         "total_attempts": len(all_scores),
     }

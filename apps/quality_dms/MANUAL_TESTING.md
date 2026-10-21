@@ -83,7 +83,7 @@ Site: `http://localhost:8000` · Workspace: **/desk/dms** · Test as: Administra
 Open each from the DMS workspace — all should load without a traceback (these three previously crashed with "DocType None not found"):
 
 - **Training Matrix Report** — grouped per employee × category with compliance %.
-- **Training Compliance Report** — row counts match actual training records.
+- **Training Compliance Report** — one row per employee-training assignment (Sr. No., Training ID, Training Title, Training Type, Department, Trainer, Date of completion, Attendance %, Assessment Y/N, Assessment Score, Status, Next Due Date, Remarks, Employee Signature); row count matches total employee assignments, not training record count.
 - **Overdue Training Report** — shows the overdue record from step 7.
 - **Training Gap Analysis** (Report Builder) and **Training Record Status Board** (Kanban — drag a card between status columns and confirm the status field updates or is properly blocked).
 - Dashboard chart(s) and Number Cards on the workspace render with sensible counts.
