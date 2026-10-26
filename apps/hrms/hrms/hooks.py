@@ -10,7 +10,7 @@ source_link = "http://github.com/frappe/hrms"
 add_to_apps_screen = [
 	{
 		"name": "hrms",
-		"logo": "/assets/hrms/images/HRv2.png",
+		"logo": "/assets/hrms/images/frappe-hr-logo.png",
 		"title": "HR",
 		"route": "/app/hr",
 		"has_permission": "hrms.hr.utils.check_app_permission",
