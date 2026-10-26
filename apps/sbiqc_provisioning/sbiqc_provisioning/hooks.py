@@ -12,7 +12,7 @@ app_license = "mit"
 add_to_apps_screen = [
 	{
 		"name": "sbiqc_provisioning",
-		"logo": "/assets/sbiqc_provisioning/images/provisioner-icon.svg",
+		"logo": "/assets/quality_dms/images/desktop_icons/sbiqc_provisioning.png",
 		"title": "SBIQC Provisioning",
 		"route": "/app/sbiqc-provisioning",
 	}
