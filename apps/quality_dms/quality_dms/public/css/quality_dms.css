@@ -100,6 +100,12 @@ body.dms-theme .body-sidebar {
 	--gray-800: var(--dms-on-navy);
 	--gray-900: #ffffff;
 	--icon-stroke: var(--dms-on-navy);
+	/* Newer Frappe builds paint .body-sidebar from --desk-sidebar-bg (not
+	   --surface-menu-bar), and the item hover from --surface-gray-2. Without
+	   these the bar stays light while the text above is forced light, so the
+	   labels are unreadable. Scoped to the sidebar only. */
+	--desk-sidebar-bg: var(--dms-navy);
+	--surface-gray-2: var(--sidebar-hover-color);
 }
 body.dms-theme .body-sidebar .standard-sidebar-item .item-anchor,
 body.dms-theme .body-sidebar .sidebar-item-label,
