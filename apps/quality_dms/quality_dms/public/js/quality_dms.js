@@ -130,6 +130,8 @@
 		"Overdue Training Report",
 		"Training Compliance Report",
 		"Training Matrix Report",
+		"Training Register",
+		"Training Assessment Results Register",
 	]);
 	// Custom Pages (not a DocType view or Report) -- frappe.get_route() for
 	// these is just [page_name], so they need their own check below.
@@ -305,6 +307,8 @@
 		"query-report/Training Matrix Report": "Training Matrix",
 		"query-report/Training Compliance Report": "Training Compliance",
 		"query-report/Overdue Training Report": "Overdue Training",
+		"query-report/Training Register": "Training Register",
+		"query-report/Training Assessment Results Register": "Assessment Results Register",
 	};
 
 	// Query reports (and some list views) re-set their own page title

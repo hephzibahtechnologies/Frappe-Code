@@ -208,6 +208,26 @@
   {
    "hidden": 0,
    "is_query_report": 1,
+   "label": "Training Register",
+   "link_count": 0,
+   "link_to": "Training Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Assessment Results Register",
+   "link_count": 0,
+   "link_to": "Training Assessment Results Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
    "label": "Overdue Training Report",
    "link_count": 0,
    "link_to": "Overdue Training Report",

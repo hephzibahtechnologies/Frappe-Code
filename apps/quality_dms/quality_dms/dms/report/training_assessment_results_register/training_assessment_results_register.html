@@ -1,0 +1,76 @@
+<style>
+	.taro-banner { text-align: center; margin-bottom: 8px; }
+	.taro-banner .taro-company { font-size: 15px; font-weight: 700; margin: 0; }
+	.taro-banner .taro-title { font-size: 13px; font-weight: 700; margin: 2px 0 0; }
+	.taro-document { margin: 6px 0; font-size: 12px; }
+	.taro-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
+	.taro-table th, .taro-table td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; word-wrap: break-word; }
+	.taro-table th { text-align: center; font-weight: 700; vertical-align: middle; }
+	.taro-num { text-align: right; }
+	.taro-center { text-align: center; }
+</style>
+
+{%
+	var fmt = function (value) {
+		return value === null || value === undefined ? "" : frappe.utils.escape_html(String(value));
+	};
+	var fmt_date = function (value) {
+		return value ? frappe.datetime.str_to_user(value) : "";
+	};
+	var single = filters.training_document && filters.training_document !== "__all__";
+%}
+
+<!-- Banner text must match BANNER_LINES in training_assessment_results_register.py -->
+<div class="taro-banner">
+	<p class="taro-company">Hephzibah Technologies Inc/Hephzibah Technologies India Private Ltd.</p>
+	<p class="taro-title">Training Quiz/Assessment Results Register</p>
+</div>
+
+{% if (single && data.length) { %}
+	<div class="taro-document">
+		<strong>Training Document:</strong> {%= fmt(data[0].training_title) %}
+		&nbsp;|&nbsp; <strong>Assessment ID:</strong> {%= fmt(data[0].assessment_id) %}
+	</div>
+{% } %}
+
+<table class="taro-table">
+	<thead>
+		<tr>
+			<th style="width: 4%;">Sr. No.</th>
+			<th style="width: 8%;">Assessment ID</th>
+			<th style="width: 14%;">Training Title</th>
+			<th style="width: 8%;">Date of Completion</th>
+			<th style="width: 7%;">Employee ID</th>
+			<th style="width: 11%;">Employee Name</th>
+			<th style="width: 9%;">Department</th>
+			<th style="width: 8%;">Trainer</th>
+			<th style="width: 5%;">Maximum Marks</th>
+			<th style="width: 5%;">Marks Obtained</th>
+			<th style="width: 5%;">Score (%)</th>
+			<th style="width: 5%;">Pass Mark (%)</th>
+			<th style="width: 6%;">Result (Pass/Fail)</th>
+			<th style="width: 12%;">Remarks</th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for (var i = 0, l = data.length; i < l; i++) { %}
+			{% var row = data[i]; %}
+			<tr>
+				<td class="taro-center">{%= fmt(row.sr_no) %}</td>
+				<td>{%= fmt(row.assessment_id) %}</td>
+				<td>{%= fmt(row.training_title) %}</td>
+				<td>{%= fmt_date(row.date_of_completion) %}</td>
+				<td>{%= fmt(row.employee_id) %}</td>
+				<td>{%= fmt(row.employee_name) %}</td>
+				<td>{%= fmt(row.department) %}</td>
+				<td>{%= fmt(row.trainer) %}</td>
+				<td class="taro-num">{%= fmt(row.maximum_marks) %}</td>
+				<td class="taro-num">{%= fmt(row.marks_obtained) %}</td>
+				<td class="taro-num">{%= fmt(row.score_pct) %}</td>
+				<td class="taro-num">{%= fmt(row.pass_mark_pct) %}</td>
+				<td class="taro-center">{%= fmt(row.result) %}</td>
+				<td>{%= fmt(row.remarks) %}</td>
+			</tr>
+		{% } %}
+	</tbody>
+</table>

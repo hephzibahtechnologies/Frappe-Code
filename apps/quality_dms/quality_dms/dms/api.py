@@ -1140,6 +1140,82 @@ def export_assessment_scores(from_date=None, to_date=None, department=None, empl
 
 
 @frappe.whitelist()
+def export_training_register(department=None, training_type=None, status=None, from_date=None, to_date=None):
+    """Export the Training Register report as a styled .xlsx (bordered cells,
+    yellow Date of Completion / Next Due Date columns, like the paper
+    register). Reuses the report's own row builder so the file can never
+    drift from the on-screen report."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export the training register.", frappe.PermissionError)
+
+    from frappe.desk.utils import provide_binary_file
+    from frappe.utils.xlsxutils import make_xlsx
+
+    from quality_dms.dms.report.training_register import training_register as register
+
+    filters = {
+        "department": department,
+        "training_type": training_type,
+        "status": status,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    xlsx_rows = register.get_export_rows(filters)
+
+    columns = register._get_columns()
+    fieldnames = [c["fieldname"] for c in columns]
+    highlight_cols = [i for i, f in enumerate(fieldnames) if f in register.HIGHLIGHT_FIELDS]
+    # Style ids: 0 header, 1 body cell, 2 yellow fill, 3 date format. Later ids
+    # win, so a highlighted column is [body, yellow, date] and its header
+    # cell also picks up the bold header style.
+    styles = {
+        "styles": [
+            {"bold": 1, "text_wrap": 1, "border": 1, "valign": "vcenter"},
+            {"text_wrap": 1, "border": 1, "valign": "vcenter"},
+            {"bg_color": "#FFFF00"},
+            {"num_format": "d-mmm-yy"},
+        ],
+        "column_styles": {i: ([1, 2, 3] if i in highlight_cols else [1]) for i in range(len(fieldnames))},
+        "row_styles": {0: [0]},
+    }
+    widths = [c["width"] // 7 for c in columns]
+
+    xlsx_file = make_xlsx(xlsx_rows, "Training Register", column_widths=widths, styles=styles)
+    provide_binary_file("Training Register", "xlsx", xlsx_file.getvalue())
+
+
+@frappe.whitelist()
+def export_training_assessment_results_register(
+    training_document=None, department=None, employee=None, result=None,
+    from_date=None, to_date=None, include_pending=1,
+):
+    """Export the Training Assessment Results Register as .xlsx with the same
+    filters as the on-screen report (the report module builds the rows and
+    the workbook, so the file can never drift from the screen)."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export the assessment register.", frappe.PermissionError)
+
+    from frappe.desk.utils import provide_binary_file
+
+    from quality_dms.dms.report.training_assessment_results_register import (
+        training_assessment_results_register as register,
+    )
+
+    content = register.build_workbook(
+        {
+            "training_document": training_document,
+            "department": department,
+            "employee": employee,
+            "result": result,
+            "from_date": from_date,
+            "to_date": to_date,
+            "include_pending": include_pending,
+        }
+    )
+    provide_binary_file("Training Assessment Results Register", "xlsx", content)
+
+
+@frappe.whitelist()
 def get_training_analytics(from_date=None, to_date=None, department=None):
     if not _is_admin_user():
         frappe.throw("Only managers can view training analytics.", frappe.PermissionError)

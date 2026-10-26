@@ -357,6 +357,28 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
+   "label": "Training Register",
+   "link_to": "Training Register",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Assessment Results",
+   "link_to": "Training Assessment Results Register",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Overdue Training",
    "link_to": "Overdue Training Report",
    "link_type": "Report",
