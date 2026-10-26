@@ -33,42 +33,6 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "users-round",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Lead",
-   "link_to": "Lead",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
-   "icon": "lightbulb",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Opportunity",
-   "link_to": "Opportunity",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
-   "icon": "customer",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Customer",
-   "link_to": "Customer",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
    "icon": "sheet",
    "indent": 1,
    "keep_closed": 1,
@@ -486,7 +450,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-22 15:48:42.933895",
+ "modified": "2026-10-08 04:53:44.671475",
  "modified_by": "Administrator",
  "module": "CRM",
  "name": "CRM",
