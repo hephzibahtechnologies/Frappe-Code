@@ -1133,10 +1133,17 @@ def export_assessment_scores(from_date=None, to_date=None, department=None, empl
         ])
 
     from frappe.desk.utils import provide_binary_file
-    from frappe.utils.xlsxutils import make_xlsx
 
-    xlsx_file = make_xlsx(xlsx_rows, "Assessment Scores")
-    provide_binary_file("Assessment Scores", "xlsx", xlsx_file.getvalue())
+    from quality_dms.dms import excel_style
+
+    # Formatting only: thin borders and wrapped text on every cell, centered
+    # numbers, and a bold/centered/wrapped header sized to its content.
+    content = excel_style.make_xlsx_bytes(
+        xlsx_rows,
+        "Assessment Scores",
+        excel_style.bordered_styles(len(headers), len(xlsx_rows), rows=xlsx_rows),
+    )
+    provide_binary_file("Assessment Scores", "xlsx", content)
 
 
 @frappe.whitelist()
@@ -1149,7 +1156,6 @@ def export_training_register(department=None, training_type=None, status=None, f
         frappe.throw("Only managers can export the training register.", frappe.PermissionError)
 
     from frappe.desk.utils import provide_binary_file
-    from frappe.utils.xlsxutils import make_xlsx
 
     from quality_dms.dms.report.training_register import training_register as register
 
@@ -1165,23 +1171,21 @@ def export_training_register(department=None, training_type=None, status=None, f
     columns = register._get_columns()
     fieldnames = [c["fieldname"] for c in columns]
     highlight_cols = [i for i, f in enumerate(fieldnames) if f in register.HIGHLIGHT_FIELDS]
-    # Style ids: 0 header, 1 body cell, 2 yellow fill, 3 date format. Later ids
-    # win, so a highlighted column is [body, yellow, date] and its header
-    # cell also picks up the bold header style.
-    styles = {
-        "styles": [
-            {"bold": 1, "text_wrap": 1, "border": 1, "valign": "vcenter"},
-            {"text_wrap": 1, "border": 1, "valign": "vcenter"},
-            {"bg_color": "#FFFF00"},
-            {"num_format": "d-mmm-yy"},
-        ],
-        "column_styles": {i: ([1, 2, 3] if i in highlight_cols else [1]) for i in range(len(fieldnames))},
-        "row_styles": {0: [0]},
-    }
+    # Per-cell borders (blank cells included) and the bold/centered header come
+    # from the shared helper; the two highlighted date columns add the yellow
+    # fill and the d-mmm-yy date format on top.
+    from quality_dms.dms import excel_style
+
+    styles = excel_style.bordered_styles(
+        len(fieldnames),
+        len(xlsx_rows),
+        column_formats={i: {"bg_color": "#FFFF00", "num_format": "d-mmm-yy"} for i in highlight_cols},
+        rows=xlsx_rows,
+    )
     widths = [c["width"] // 7 for c in columns]
 
-    xlsx_file = make_xlsx(xlsx_rows, "Training Register", column_widths=widths, styles=styles)
-    provide_binary_file("Training Register", "xlsx", xlsx_file.getvalue())
+    content = excel_style.make_xlsx_bytes(xlsx_rows, "Training Register", styles, widths)
+    provide_binary_file("Training Register", "xlsx", content)
 
 
 @frappe.whitelist()
@@ -1213,6 +1217,204 @@ def export_training_assessment_results_register(
         }
     )
     provide_binary_file("Training Assessment Results Register", "xlsx", content)
+
+
+# ── Training Analytics: Employee Scores / Pending Trainings Excel exports ───
+
+_ANALYTICS_TEXT_MAX = 200
+
+# Columns and order are exactly the page's CSV download for each table.
+# `sort_keys` are the columns the page lets you sort by; `numeric_sort` selects
+# which of the page's two comparators applies (see _compare_like_the_page).
+_ANALYTICS_TABLES = {
+    "employee_scores": {
+        "sheet": "Employee Scores",
+        "headers": ["Employee", "Department", "Completed", "Total", "Completion %", "Overall Score"],
+        "row": lambda r: [
+            r.get("employee_name") or r.get("employee"), r.get("department"), r.get("completed"),
+            r.get("total"), r.get("completion_pct"), r.get("overall_score"),
+        ],
+        "sort_keys": ("employee_name", "department", "completed", "completion_pct", "overall_score"),
+        "default_sort": ("overall_score", "desc"),
+        "numeric_sort": True,
+    },
+    "pending_trainings": {
+        "sheet": "Pending Trainings",
+        "headers": ["Employee", "Department", "Document", "Status", "Due Date"],
+        "row": lambda r: [
+            r.get("employee_name"), r.get("department"), r.get("document"), r.get("status"), r.get("due_date"),
+        ],
+        "sort_keys": ("employee_name", "department", "document", "status", "due_date_raw"),
+        "default_sort": ("due_date_raw", "asc"),
+        "numeric_sort": False,
+    },
+}
+
+
+def _analytics_text_param(value, label):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        frappe.throw(f"{label} must be text.")
+    if len(value) > _ANALYTICS_TEXT_MAX:
+        frappe.throw(f"{label} is too long (maximum {_ANALYTICS_TEXT_MAX} characters).")
+    return value
+
+
+def _analytics_date_param(value, label):
+    if value in (None, ""):
+        return None
+    try:
+        return str(frappe.utils.getdate(value))
+    except Exception:
+        frappe.throw(f"{label} is not a valid date.")
+
+
+# Order of ASCII punctuation/symbols in the Unicode root collation (CLDR) the
+# browser's localeCompare uses: whitespace < these < digits < letters.
+_ICU_PUNCTUATION = "_-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$"
+# Letters the root collation treats as variants of a base letter.
+_LETTER_VARIANTS = {"ø": "o", "ł": "l", "đ": "d", "ð": "d", "ħ": "h", "æ": "ae", "œ": "oe", "þ": "th"}
+
+
+def _icu_primary_weight(ch):
+    if ch.isspace():
+        return (0, ord(ch))
+    position = _ICU_PUNCTUATION.find(ch)
+    if position >= 0:
+        return (1, position)
+    if ch.isdecimal():
+        return (2, ord(ch))
+    if ch.isalpha():
+        return (3, ord(ch))
+    return (1, len(_ICU_PUNCTUATION) + ord(ch))  # other symbols: after ASCII punctuation
+
+
+def _locale_sort_key(value):
+    """Approximates the browser's String.localeCompare (CLDR root collation):
+    compare character by character ignoring case and accents, with whitespace
+    before punctuation before digits before letters; then break ties on
+    accents, then on case (lowercase first). See _compare_like_the_page for the
+    known remaining differences."""
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(value))
+    base = "".join(ch for ch in text if not unicodedata.combining(ch)).casefold()
+    base = "".join(_LETTER_VARIANTS.get(ch, ch) for ch in base)
+    primary = tuple(_icu_primary_weight(ch) for ch in base)
+    # last tiebreak: strings that only differ in a way the levels above fold
+    # together (for example "ss" and "ß") keep a stable, browser-like order
+    return (primary, text.casefold(), str(value).swapcase(), str(value))
+
+
+def _three_way(a, b):
+    return (a > b) - (a < b)
+
+
+def _compare_like_the_page(a, b, key, direction, numeric_sort):
+    """Port of the two row comparators in training_analytics.js.
+
+    numeric_sort (Employee Scores): missing values become +/-Infinity so they
+    always sort last; two strings use localeCompare; a string against a number
+    is NaN in the page, i.e. "equal". Otherwise (Pending Trainings): both
+    values are coerced with `|| ""` and compared as strings, so a missing value
+    sorts as "". Descending swaps the operands, so ties keep the server order
+    in both directions (Array.sort and list.sort are both stable).
+
+    Known difference: the browser uses ICU collation for its locale, while
+    _locale_sort_key is an approximation. Row sets and values are identical;
+    only names containing unusual punctuation or non-Latin scripts could order
+    differently.
+    """
+    import math
+
+    if numeric_sort:
+        missing = math.inf if direction == "asc" else -math.inf
+        av, bv = a.get(key), b.get(key)
+        av = missing if av is None else av
+        bv = missing if bv is None else bv
+        if isinstance(av, str) and isinstance(bv, str):
+            left, right = (av, bv) if direction == "asc" else (bv, av)
+            return _three_way(_locale_sort_key(left), _locale_sort_key(right))
+        if isinstance(av, str) or isinstance(bv, str):
+            return 0
+        left, right = (av, bv) if direction == "asc" else (bv, av)
+        return _three_way(left, right)
+
+    av, bv = str(a.get(key) or ""), str(b.get(key) or "")
+    left, right = (av, bv) if direction == "asc" else (bv, av)
+    return _three_way(_locale_sort_key(left), _locale_sort_key(right))
+
+
+def _filter_analytics_rows(rows, employee_filter, department_filter):
+    """The same case-insensitive "contains" filters as the page's typeahead boxes."""
+    if employee_filter:
+        needle = employee_filter.lower()
+        rows = [r for r in rows if needle in (r.get("employee_name") or "").lower()]
+    if department_filter:
+        needle = department_filter.lower()
+        rows = [r for r in rows if needle in (r.get("department") or "").lower()]
+    return rows
+
+
+def _sort_analytics_rows(rows, spec, sort_key, sort_dir):
+    import functools
+
+    return sorted(
+        rows,
+        key=functools.cmp_to_key(
+            lambda a, b: _compare_like_the_page(a, b, sort_key, sort_dir, spec["numeric_sort"])
+        ),
+    )
+
+
+@frappe.whitelist()
+def export_analytics_table(
+    table=None, from_date=None, to_date=None, department=None,
+    employee_filter=None, department_filter=None, sort_key=None, sort_dir=None,
+):
+    """Excel export of the Training Analytics "Employee Scores" or "Pending
+    Trainings" table, matching what the page shows for its current date and
+    department filters, typeahead boxes and selected sort.
+
+    Rows are rebuilt on the server from get_training_analytics -- nothing the
+    browser could tamper with is written to the file -- and the workbook is
+    written with explicit cell types (excel_style.build_workbook) so text such
+    as "=1+1" stays text. CSV downloads and the Assessment Scores export are
+    separate and unchanged."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export training analytics.", frappe.PermissionError)
+
+    spec = _ANALYTICS_TABLES.get(table) if isinstance(table, str) else None
+    if not spec:
+        frappe.throw("Unknown analytics table. Expected 'employee_scores' or 'pending_trainings'.")
+
+    if bool(sort_key) != bool(sort_dir):
+        frappe.throw("sort_key and sort_dir must be given together.")
+    if sort_key:
+        if sort_key not in spec["sort_keys"]:
+            frappe.throw(f"Cannot sort {spec['sheet']} by '{sort_key}'.")
+        if sort_dir not in ("asc", "desc"):
+            frappe.throw("sort_dir must be 'asc' or 'desc'.")
+    else:
+        sort_key, sort_dir = spec["default_sort"]
+
+    from_date = _analytics_date_param(from_date, "From date")
+    to_date = _analytics_date_param(to_date, "To date")
+    department = _analytics_text_param(department, "Department") or None
+    employee_filter = _analytics_text_param(employee_filter, "Employee filter")
+    department_filter = _analytics_text_param(department_filter, "Department filter")
+
+    rows = get_training_analytics(from_date, to_date, department)[table]
+    rows = _filter_analytics_rows(rows, employee_filter, department_filter)
+    rows = _sort_analytics_rows(rows, spec, sort_key, sort_dir)
+
+    from frappe.desk.utils import provide_binary_file
+
+    from quality_dms.dms import excel_style
+
+    xlsx_rows = [spec["headers"]] + [spec["row"](r) for r in rows]
+    provide_binary_file(spec["sheet"], "xlsx", excel_style.build_workbook(spec["sheet"], xlsx_rows))
 
 
 @frappe.whitelist()

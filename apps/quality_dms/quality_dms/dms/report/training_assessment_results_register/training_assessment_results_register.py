@@ -451,7 +451,11 @@ def _make_formats(workbook):
             {**base, "bold": 1, "border": 1, "align": "center", "valign": "vcenter", "text_wrap": 1}
         ),
         "cell": workbook.add_format({**base, "border": 1, "valign": "top", "text_wrap": 1}),
-        "date": workbook.add_format({**base, "border": 1, "valign": "top", "num_format": "d-mmm-yy"}),
+        # numbers and real dates are centered; every table cell wraps text
+        "number": workbook.add_format({**base, "border": 1, "valign": "top", "text_wrap": 1, "align": "center"}),
+        "date": workbook.add_format(
+            {**base, "border": 1, "valign": "top", "text_wrap": 1, "align": "center", "num_format": "d-mmm-yy"}
+        ),
     }
 
 
@@ -473,7 +477,13 @@ def _write_sheet(workbook, formats, sheet_name, rows, renumber, document_line=No
         sheet.merge_range(next_row, 0, next_row, last_col, document_line, formats["document"])
         next_row += 1
 
-    sheet.set_row(next_row, 32)
+    from quality_dms.dms import excel_style
+
+    # sized to the wrapped header text, never shorter than 30 points
+    sheet.set_row(
+        next_row,
+        excel_style.header_row_height([c[0] for c in COLUMNS], [c[4] for c in COLUMNS]),
+    )
     for col, (label, *_rest) in enumerate(COLUMNS):
         sheet.write_string(next_row, col, label, formats["header"])
 
@@ -486,6 +496,6 @@ def _write_sheet(workbook, formats, sheet_name, rows, renumber, document_line=No
             elif isinstance(value, (datetime.date, datetime.datetime)):
                 sheet.write_datetime(excel_row, col, value, formats["date"])
             elif isinstance(value, (int, float)):
-                sheet.write_number(excel_row, col, value, formats["cell"])
+                sheet.write_number(excel_row, col, value, formats["number"])
             else:
                 sheet.write_string(excel_row, col, str(value), formats["cell"])

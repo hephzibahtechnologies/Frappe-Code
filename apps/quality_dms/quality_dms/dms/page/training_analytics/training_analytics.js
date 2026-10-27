@@ -185,6 +185,7 @@ class TrainingAnalytics {
 								${this._unique(data.employee_scores, "department").map((v) => `<option value="${frappe.utils.escape_html(v)}">`).join("")}
 							</datalist>
 							<button class="btn btn-xs btn-default ta-download" data-table="employee_scores">${__("Download CSV")}</button>
+							<button class="btn btn-xs btn-default ta-download-excel-table" data-table="employee_scores">${__("Download Excel")}</button>
 						</div>
 					</div>
 					<div id="ta-emp-table-body"></div>
@@ -223,6 +224,7 @@ class TrainingAnalytics {
 								${this._unique(data.pending_trainings, "department").map((v) => `<option value="${frappe.utils.escape_html(v)}">`).join("")}
 							</datalist>
 							<button class="btn btn-xs btn-default ta-download" data-table="pending_trainings">${__("Download CSV")}</button>
+							<button class="btn btn-xs btn-default ta-download-excel-table" data-table="pending_trainings">${__("Download Excel")}</button>
 						</div>
 					</div>
 					<div id="ta-pend-table-body"></div>
@@ -241,6 +243,12 @@ class TrainingAnalytics {
 		});
 		this.$content.find(".ta-download-excel").on("click", () => {
 			this.download_excel();
+		});
+		// Employee Scores / Pending Trainings. A different class from
+		// .ta-download and .ta-download-excel on purpose, so neither the CSV
+		// nor the Assessment Scores export handler above can fire for these.
+		this.$content.find(".ta-download-excel-table").on("click", (e) => {
+			this.download_excel_table($(e.currentTarget).data("table"));
 		});
 		this.$content.find("#ta-emp-employee-filter").on("input", (e) => {
 			this.empEmployeeFilter = e.target.value.toLowerCase();
@@ -704,6 +712,28 @@ class TrainingAnalytics {
 			"/api/method/quality_dms.dms.api.export_assessment_scores?" + $.param(params)
 		);
 		window.open(url);
+	}
+
+	download_excel_table(table) {
+		// Server-side export (api.export_analytics_table). Only the page's
+		// current filters and sort are sent -- the server rebuilds the rows
+		// itself, so the file matches the table as filtered and sorted here
+		// without trusting any row data from the browser.
+		const isEmployees = table === "employee_scores";
+		const sort = isEmployees ? this.empSort : this.pendSort;
+		const params = {
+			table: table,
+			from_date: this.filters.from_date || "",
+			to_date: this.filters.to_date || "",
+			department: this.filters.department || "",
+			employee_filter: (isEmployees ? this.empEmployeeFilter : this.pendEmployeeFilter) || "",
+			department_filter: (isEmployees ? this.empDeptFilter : this.pendDeptFilter) || "",
+			sort_key: sort.key,
+			sort_dir: sort.dir,
+		};
+		window.open(
+			frappe.urllib.get_full_url("/api/method/quality_dms.dms.api.export_analytics_table?" + $.param(params))
+		);
 	}
 
 	styles() {
