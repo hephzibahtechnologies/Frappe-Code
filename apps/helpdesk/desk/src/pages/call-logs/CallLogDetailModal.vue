@@ -101,6 +101,7 @@ import TicketIcon from "@/components/icons/TicketIcon.vue";
 import { FeatherIcon, Avatar, Tooltip, createResource, dayjs } from "frappe-ui";
 import { computed, h, nextTick, ref, watch } from "vue";
 import { formatDate } from "@vueuse/core";
+import { displayFormat } from "@/dateDisplayFormat";
 import { timeAgo } from "@/utils";
 import { statusColorMap, statusLabelMap } from "./utils";
 import { useAuthStore } from "@/stores/auth";
@@ -238,7 +239,9 @@ function getCallLogDetail(row, log, columns = []) {
     };
   } else if (["modified", "creation"].includes(row)) {
     return {
-      label: dayjs(log[row]).format("ddd, MMM D, YYYY h:mm a"),
+      label: dayjs(log[row]).format(
+        displayFormat("ddd, MMM D, YYYY h:mm a", "ddd, DD-MMM-YYYY h:mm a")
+      ),
       timeAgo: timeAgo(log[row]),
     };
   }

@@ -13,6 +13,7 @@ import { h, markRaw, ref } from "vue";
 import zod from "zod";
 import LucideBrushCleaning from "~icons/lucide/brush-cleaning";
 import TicketIcon from "./components/icons/TicketIcon.vue";
+import { displayFormat } from "./dateDisplayFormat";
 import { getMeta } from "./stores/meta";
 import { __ } from "./translation";
 
@@ -206,7 +207,12 @@ export function prettyDate(date, mini = false) {
   }
 }
 
-export const dateTooltipFormat = "ddd, MMM D, YYYY h:mm A";
+// Follows the site format only when it is the optional dd-MMM-yyyy (see dateDisplayFormat.ts);
+// every other format keeps the shipped pattern.
+export const dateTooltipFormat = displayFormat(
+  "ddd, MMM D, YYYY h:mm A",
+  "ddd, DD-MMM-YYYY h:mm A"
+);
 
 export function errorMessage(title, message) {
   toast.error(message);

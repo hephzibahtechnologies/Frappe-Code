@@ -79,6 +79,10 @@ import {
 } from "frappe-ui";
 import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { displayFormat } from "@/dateDisplayFormat";
+
+// Deadline tooltips; follow the site format only when it is dd-MMM-yyyy.
+const longDateTimeFormat = displayFormat("LLLL", "dddd, DD-MMM-YYYY h:mm A");
 
 const router = useRouter();
 const route = useRoute();
@@ -229,7 +233,7 @@ function handleResponseByField(row: any, item: string) {
     return h(
       Tooltip,
       {
-        text: dayjs(item).format("LLLL"),
+        text: dayjs(item).format(longDateTimeFormat),
       },
       h(Badge, {
         label: shortDuration(item),
@@ -271,7 +275,7 @@ function handleResolutionByField(row: any, item: string) {
   return h(
     Tooltip,
     {
-      text: dayjs(item).format("LLLL"),
+      text: dayjs(item).format(longDateTimeFormat),
     },
     h(Badge, {
       label: shortDuration(item),

@@ -71,7 +71,7 @@
                     <div class="text-base text-ink-gray-7">
                       {{
                         dayjsLocal(article.data.modified).format(
-                          "MMM D, h:mm A"
+                          articleModifiedFormat
                         )
                       }}
                     </div>
@@ -199,7 +199,9 @@
               <div class="flex items-center gap-1">
                 <span class="text-p-xs text-ink-gray-7">
                   {{
-                    dayjsLocal(article.data.modified).format("MMM D, h:mm A")
+                    dayjsLocal(article.data.modified).format(
+                      articleModifiedFormat
+                    )
                   }}
                 </span>
                 <IconDot
@@ -260,6 +262,7 @@ import {
 } from "@/stores/knowledgeBase";
 import { capture } from "@/telemetry";
 import { CleanStyles, ComponentUtils } from "@/tiptap-extensions";
+import { displayFormat } from "@/dateDisplayFormat";
 import { Article, Breadcrumb, Error, FeedbackAction, Resource } from "@/types";
 import {
   copyToClipboard,
@@ -305,6 +308,9 @@ const props = defineProps({
     required: true,
   },
 });
+
+// "Last modified" text; follows the site format only when it is dd-MMM-yyyy.
+const articleModifiedFormat = displayFormat("MMM D, h:mm A", "DD-MMM-YYYY, h:mm A");
 
 const showCategoryModal = ref(false);
 const editTitle = ref(false);
