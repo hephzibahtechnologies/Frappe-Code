@@ -106,13 +106,15 @@ class TestExcelStyleHelper(UnitTestCase):
         import datetime
 
         rows = [["Name", "Score", "Date"], ["=1+1 text", 90, datetime.date(2026, 1, 2)]]
-        styles = excel_style.bordered_styles(3, 2, rows=rows, column_formats={2: {"num_format": "d-mmm-yy"}})
+        styles = excel_style.bordered_styles(
+            3, 2, rows=rows, column_formats={2: {"num_format": excel_style.EXCEL_DATE_FORMAT}}
+        )
         ws = openpyxl.load_workbook(BytesIO(excel_style.make_xlsx_bytes(rows, "Probe", styles))).active
         self.assertGreaterEqual(ws.row_dimensions[1].height, 30)
         self.assertEqual(ws["B2"].value, 90)
         self.assertEqual(ws["B2"].alignment.horizontal, "center")
         self.assertEqual(ws["C2"].alignment.horizontal, "center")
-        self.assertEqual(ws["C2"].number_format, "d-mmm-yy")
+        self.assertEqual(ws["C2"].number_format, "dd-mmm-yyyy")
         self.assertTrue(ws["A2"].alignment.wrap_text)
 
 
@@ -220,6 +222,10 @@ class TestDMSExcelExports(IntegrationTestCase):
                     self.assertEqual(
                         cell.alignment.horizontal, "center", f"{cell.coordinate} ({cell.value!r}) is not centered"
                     )
+                    if cell.is_date:
+                        self.assertEqual(
+                            cell.number_format, "dd-mmm-yyyy", f"{cell.coordinate} date cell is not dd-mmm-yyyy"
+                        )
                 elif cell.value not in (None, ""):
                     self.assertNotEqual(
                         cell.alignment.horizontal, "center", f"text {cell.coordinate} ({cell.value!r}) is centered"

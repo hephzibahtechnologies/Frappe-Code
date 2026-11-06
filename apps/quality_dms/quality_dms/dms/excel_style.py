@@ -39,6 +39,10 @@ BODY_FORMAT = {
 # Layered on top of BODY_FORMAT for numbers and real dates only.
 CENTER_FORMAT = {"align": "center"}
 
+# Excel number format for real date cells: 05-Nov-2026. One definition, shared by every
+# DMS export (Excel itself is case-insensitive for these codes).
+EXCEL_DATE_FORMAT = "dd-mmm-yyyy"
+
 # Excel column widths, in characters.
 MIN_WIDTH = 10
 MAX_WIDTH = 45
@@ -184,7 +188,7 @@ def build_workbook(sheet_name, rows, widths=None):
     header_format = workbook.add_format(HEADER_FORMAT)
     body_format = workbook.add_format(BODY_FORMAT)
     number_format = workbook.add_format({**BODY_FORMAT, **CENTER_FORMAT})
-    date_format = workbook.add_format({**BODY_FORMAT, **CENTER_FORMAT, "num_format": "d-mmm-yy"})
+    date_format = workbook.add_format({**BODY_FORMAT, **CENTER_FORMAT, "num_format": EXCEL_DATE_FORMAT})
 
     sheet = workbook.add_worksheet(get_sanitized_sheet_name(sheet_name))
     widths = widths or column_widths(rows)

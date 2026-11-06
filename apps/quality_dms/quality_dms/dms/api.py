@@ -1173,13 +1173,15 @@ def export_training_register(department=None, training_type=None, status=None, f
     highlight_cols = [i for i, f in enumerate(fieldnames) if f in register.HIGHLIGHT_FIELDS]
     # Per-cell borders (blank cells included) and the bold/centered header come
     # from the shared helper; the two highlighted date columns add the yellow
-    # fill and the d-mmm-yy date format on top.
+    # fill and the dd-mmm-yyyy date format on top.
     from quality_dms.dms import excel_style
 
     styles = excel_style.bordered_styles(
         len(fieldnames),
         len(xlsx_rows),
-        column_formats={i: {"bg_color": "#FFFF00", "num_format": "d-mmm-yy"} for i in highlight_cols},
+        column_formats={
+            i: {"bg_color": "#FFFF00", "num_format": excel_style.EXCEL_DATE_FORMAT} for i in highlight_cols
+        },
         rows=xlsx_rows,
     )
     widths = [c["width"] // 7 for c in columns]

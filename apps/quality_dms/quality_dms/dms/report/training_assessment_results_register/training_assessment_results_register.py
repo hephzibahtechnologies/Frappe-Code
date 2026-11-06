@@ -443,6 +443,8 @@ def _document_line(document, title):
 
 
 def _make_formats(workbook):
+    from quality_dms.dms import excel_style
+
     base = {"font_name": "Arial", "font_size": 10}
     return {
         "banner": workbook.add_format({**base, "bold": 1, "font_size": 12, "align": "center", "valign": "vcenter"}),
@@ -454,7 +456,10 @@ def _make_formats(workbook):
         # numbers and real dates are centered; every table cell wraps text
         "number": workbook.add_format({**base, "border": 1, "valign": "top", "text_wrap": 1, "align": "center"}),
         "date": workbook.add_format(
-            {**base, "border": 1, "valign": "top", "text_wrap": 1, "align": "center", "num_format": "d-mmm-yy"}
+            {
+                **base, "border": 1, "valign": "top", "text_wrap": 1, "align": "center",
+                "num_format": excel_style.EXCEL_DATE_FORMAT,
+            }
         ),
     }
 
