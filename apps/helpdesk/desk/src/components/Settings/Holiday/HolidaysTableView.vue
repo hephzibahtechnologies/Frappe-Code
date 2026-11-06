@@ -33,7 +33,7 @@
             class="!bg-surface-white w-full text-base px-0 focus:!ring-0 border-none hover:bg-surface-white outline-none no-underline focus:!outline-none"
           />
           <div v-else>
-            {{ dayjs(holiday[column.key]).format("DD MMM YYYY") }}
+            {{ dayjs(holiday[column.key]).format(holidayDateFormat) }}
           </div>
         </div>
         <div class="flex justify-end">
@@ -61,6 +61,10 @@ import { ConfirmDelete, getFormattedDate } from "@/utils";
 import { holidayData } from "@/stores/holidayList";
 import AddHolidayModal from "./Modals/AddHolidayModal.vue";
 import { dayjs, Dropdown } from "frappe-ui";
+import { displayFormat } from "@/dateDisplayFormat";
+
+// Holiday dates; follow the site format only when it is dd-MMM-yyyy.
+const holidayDateFormat = displayFormat("DD MMM YYYY", "DD-MMM-YYYY");
 
 const isConfirmingDelete = ref(false);
 

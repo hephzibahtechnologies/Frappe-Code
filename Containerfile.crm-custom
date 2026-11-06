@@ -13,6 +13,7 @@ COPY --chown=frappe:frappe apps/crm_unify apps/crm_unify
 COPY --chown=frappe:frappe apps/quality_dms apps/quality_dms
 COPY --chown=frappe:frappe apps/crm apps/crm
 COPY --chown=frappe:frappe apps/mercury apps/mercury
+COPY --chown=frappe:frappe apps/sbiqc_core apps/sbiqc_core
 
 # erpnext/hrms/helpdesk are already installed in the base image (pulled
 # pristine from upstream via apps-public.json so bench get-app can set up
@@ -27,10 +28,10 @@ COPY --chown=frappe:frappe apps/hrms apps/hrms
 COPY --chown=frappe:frappe apps/helpdesk apps/helpdesk
 
 RUN sed -i -e '$a\' sites/apps.txt \
-    && printf '%s\n' telephony sbiqc_provisioning crm_unify quality_dms crm mercury >> sites/apps.txt \
+    && printf '%s\n' telephony sbiqc_provisioning crm_unify quality_dms crm mercury sbiqc_core >> sites/apps.txt \
     && cat sites/apps.txt
 
-RUN /home/frappe/frappe-bench/env/bin/pip install -e apps/telephony -e apps/sbiqc_provisioning -e apps/crm_unify -e apps/quality_dms -e apps/crm -e apps/mercury \
+RUN /home/frappe/frappe-bench/env/bin/pip install -e apps/telephony -e apps/sbiqc_provisioning -e apps/crm_unify -e apps/quality_dms -e apps/crm -e apps/mercury -e apps/sbiqc_core \
     -e apps/erpnext -e apps/hrms -e apps/helpdesk
 
 ENV NVM_DIR=/home/frappe/.nvm
@@ -40,7 +41,7 @@ RUN mkdir -p sites/assets \
     && cp -r /home/frappe/frappe-bench/assets/* sites/assets/ 2>/dev/null || true
 
 RUN bash -c '\
-    for app in telephony sbiqc_provisioning crm_unify quality_dms crm mercury erpnext hrms helpdesk; do \
+    for app in telephony sbiqc_provisioning crm_unify quality_dms crm mercury sbiqc_core erpnext hrms helpdesk; do \
       if [ -f apps/$app/package.json ]; then \
         (cd apps/$app && yarn install --check-files) || echo "yarn install skipped/failed for $app, continuing"; \
       fi; \

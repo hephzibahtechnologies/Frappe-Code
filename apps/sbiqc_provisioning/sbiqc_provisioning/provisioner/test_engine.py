@@ -214,9 +214,10 @@ class IntegrationTestProvisioningEngine(IntegrationTestCase):
 
 		tenant.reload()
 		self.assertEqual(tenant.status, "Active")
-		# only the NOT-yet-installed app should have been installed
+		# only the NOT-yet-installed apps should have been installed: the tenant's own
+		# choice (quality_dms) plus the mandatory sbiqc_core every site gets
 		installed_calls = [c.args[1] for c in mock_install_app.call_args_list]
-		self.assertEqual(installed_calls, ["quality_dms"])
+		self.assertEqual(installed_calls, ["quality_dms", "sbiqc_core"])
 
 	def test_admin_password_is_random_not_hardcoded(self):
 		"""Regression test for the Phase 1 security fix: no static default password."""

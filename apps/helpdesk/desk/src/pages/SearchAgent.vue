@@ -211,6 +211,7 @@
 import { LayoutHeader } from "@/components";
 import SearchMultiSelect from "@/components/SearchMultiSelect.vue";
 import { useShortcut } from "@/composables/shortcuts";
+import { displayFormat } from "@/dateDisplayFormat";
 import { __ } from "@/translation";
 import {
   Breadcrumbs,
@@ -452,7 +453,7 @@ function getTicketNumber(item: SearchResultItem) {
 
 function formatDate(date: number | string) {
   if (!date) return "";
-  let FORMAT = "MMM D, YYYY hh:mm A";
+  let FORMAT = displayFormat("MMM D, YYYY hh:mm A", "DD-MMM-YYYY hh:mm A");
   try {
     // Handle Unix timestamp (seconds) - use dayjs.unix()
     if (typeof date === "number") {

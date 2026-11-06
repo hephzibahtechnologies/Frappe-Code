@@ -13,7 +13,7 @@
       </span>
     </div>
     <div v-for="data in slaData" :key="data.label" class="space-y-1.5">
-      <Tooltip :text="dayjs(data.value).format('LLLL')">
+      <Tooltip :text="dayjs(data.value).format(longDateTimeFormat)">
         <span class="block text-sm text-ink-gray-7">{{ data.title }}</span>
       </Tooltip>
       <span class="block break-words text-base font-medium text-ink-gray-9">
@@ -51,6 +51,10 @@ import { dayjs } from "frappe-ui";
 import { Field } from "@/types";
 import { computed, inject } from "vue";
 import { ITicket } from "./symbols";
+import { displayFormat } from "@/dateDisplayFormat";
+
+// Date field tooltips; follow the site format only when it is dd-MMM-yyyy.
+const longDateTimeFormat = displayFormat("LLLL", "dddd, DD-MMM-YYYY h:mm A");
 
 const ticket = inject(ITicket);
 

@@ -977,6 +977,448 @@ _SCORE_BUCKETS = [
 ]
 
 
+def _get_assessment_scores(from_date=None, to_date=None, department=None, employee_filter=None, department_filter=None):
+    """One row per recorded DMS Training Score History attempt -- a different
+    grain from employee_scores above (one row per employee), and a
+    deliberately separate result key rather than a repurposing of it: quiz-
+    less trainings never create a Score History row (record_score() in
+    dms_training_record.py is only called when a quiz was actually graded),
+    so this table structurally excludes every quiz-less completion.
+    employee_scores (built from Document Acknowledgement directly) remains
+    the only place that shows every assignment regardless of whether a quiz
+    was involved, and is intentionally left untouched for that reason."""
+    from quality_dms.dms.doctype.training_settings.training_settings import get_pass_percentage
+
+    conditions = ["1=1"]
+    values = {}
+    if department:
+        conditions.append("emp.department = %(department)s")
+        values["department"] = department
+    if from_date:
+        conditions.append("sh.recorded_on >= %(from_date)s")
+        values["from_date"] = from_date
+    if to_date:
+        conditions.append("sh.recorded_on <= %(to_date)s")
+        values["to_date"] = to_date
+    where = " AND ".join(conditions)
+
+    rows = frappe.db.sql(
+        f"""
+        SELECT
+            sh.name AS assessment_id,
+            sh.training_record AS training_record,
+            dl.title AS training_title,
+            sh.recorded_on AS date_of_completion,
+            sh.employee AS employee_id,
+            sh.employee_name AS employee_name,
+            emp.department AS department,
+            (
+                SELECT s.trainer
+                FROM `tabDMS Training Session` s
+                WHERE s.training_record = sh.training_record
+                ORDER BY s.session_datetime DESC, s.creation DESC
+                LIMIT 1
+            ) AS trainer,
+            sh.score AS score,
+            sh.quiz_passed AS quiz_passed,
+            dl.training_quiz AS training_quiz,
+            (
+                SELECT da.remarks
+                FROM `tabDocument Acknowledgement` da
+                WHERE da.parent = sh.training_record
+                    AND da.parenttype = 'DMS Training Record'
+                    AND da.employee = sh.employee
+                LIMIT 1
+            ) AS remarks
+        FROM `tabDMS Training Score History` sh
+        LEFT JOIN `tabDocument Library` dl ON dl.name = sh.document
+        LEFT JOIN `tabEmployee` emp ON emp.name = sh.employee
+        WHERE {where}
+        ORDER BY sh.recorded_on DESC
+        """,
+        values,
+        as_dict=True,
+    )
+
+    # Pass Mark (%) must replicate DMSQuiz.get_effective_pass_percentage()'s
+    # own fallback exactly (quiz.pass_percentage or the Training Settings
+    # default) -- cached per quiz name since many rows typically share one quiz.
+    pass_pct_cache = {}
+
+    def resolve_pass_percentage(quiz_name):
+        if not quiz_name:
+            return get_pass_percentage()
+        if quiz_name not in pass_pct_cache:
+            value = frappe.db.get_value("DMS Quiz", quiz_name, "pass_percentage")
+            pass_pct_cache[quiz_name] = value or get_pass_percentage()
+        return pass_pct_cache[quiz_name]
+
+    scores = []
+    for row in rows:
+        if employee_filter and employee_filter.lower() not in (row.employee_name or "").lower():
+            continue
+        if department_filter and department_filter.lower() not in (row.department or "Unassigned").lower():
+            continue
+        scores.append({
+            "assessment_id": row.assessment_id,
+            "training_record": row.training_record,
+            "training_title": row.training_title,
+            # Date of completion here is the individual assessment attempt's
+            # own timestamp (recorded_on), not Document Acknowledgement's
+            # completion_date -- that field only reflects the row's eventual
+            # successful sign-off and would misattribute an earlier failed
+            # attempt's date to a later passing one. Verified in
+            # dms_training_record.py: completion_date is set once, in
+            # _sync_progress(), only when acknowledged becomes true.
+            "date_of_completion": frappe.utils.format_datetime(row.date_of_completion) if row.date_of_completion else None,
+            "employee_id": row.employee_id,
+            "employee_name": row.employee_name,
+            "department": row.department or "Unassigned",
+            "trainer": row.trainer,
+            # Maximum Marks / Marks Obtained: the quiz engine (DMSQuiz.grade())
+            # computes real marks-weighted totals internally but only persists
+            # the final percentage -- total_marks/earned_marks are local
+            # variables in dms_quiz.py, never stored anywhere. Reconstructing
+            # them from the quiz's *current* questions would misrepresent
+            # history if the quiz was edited since the attempt. Per the
+            # confirmed business decision: Maximum Marks is always 100 (the
+            # scale the system actually persists), Marks Obtained is the
+            # same stored percentage as Score (%) -- not a separately
+            # persisted raw-mark value.
+            "maximum_marks": 100,
+            "marks_obtained": row.score,
+            "score_pct": row.score,
+            "pass_mark_pct": resolve_pass_percentage(row.training_quiz),
+            "result": "Pass" if row.quiz_passed else "Fail",
+            # Remarks live on Document Acknowledgement, one row per
+            # employee+training assignment (not per attempt) -- confirmed in
+            # dms_training_record.py: quiz_attempts increments on that same
+            # single row across retakes, so a value here is necessarily
+            # shared across every attempt for that assignment, not specific
+            # to this one.
+            "remarks": row.remarks,
+        })
+
+    for i, row in enumerate(scores, start=1):
+        row["sr_no"] = i
+
+    return scores
+
+
+@frappe.whitelist()
+def export_assessment_scores(from_date=None, to_date=None, department=None, employee_filter=None, department_filter=None):
+    """Export the assessment-attempt table as a native .xlsx file using
+    Frappe's own make_xlsx (no new dependency) -- reuses _get_assessment_scores
+    directly so the exported data/columns can never drift from the on-screen
+    table or the CSV export."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export training analytics.", frappe.PermissionError)
+
+    rows = _get_assessment_scores(from_date, to_date, department, employee_filter, department_filter)
+
+    headers = [
+        "Sr. No.", "Assessment ID", "Training Title", "Date of completion",
+        "Employee ID", "Employee Name", "Department", "Trainer",
+        "Maximum Marks", "Marks Obtained", "Score (%)", "Pass Mark (%)",
+        "Result (Pass/Fail)", "Remarks",
+    ]
+    xlsx_rows = [headers]
+    for r in rows:
+        xlsx_rows.append([
+            r["sr_no"], r["assessment_id"], r["training_title"] or "",
+            r["date_of_completion"] or "", r["employee_id"], r["employee_name"] or "",
+            r["department"] or "", r["trainer"] or "",
+            r["maximum_marks"], r["marks_obtained"], r["score_pct"], r["pass_mark_pct"],
+            r["result"], r["remarks"] or "",
+        ])
+
+    from frappe.desk.utils import provide_binary_file
+
+    from quality_dms.dms import excel_style
+
+    # Formatting only: thin borders and wrapped text on every cell, centered
+    # numbers, and a bold/centered/wrapped header sized to its content.
+    content = excel_style.make_xlsx_bytes(
+        xlsx_rows,
+        "Assessment Scores",
+        excel_style.bordered_styles(len(headers), len(xlsx_rows), rows=xlsx_rows),
+    )
+    provide_binary_file("Assessment Scores", "xlsx", content)
+
+
+@frappe.whitelist()
+def export_training_register(department=None, training_type=None, status=None, from_date=None, to_date=None):
+    """Export the Training Register report as a styled .xlsx (bordered cells,
+    yellow Date of Completion / Next Due Date columns, like the paper
+    register). Reuses the report's own row builder so the file can never
+    drift from the on-screen report."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export the training register.", frappe.PermissionError)
+
+    from frappe.desk.utils import provide_binary_file
+
+    from quality_dms.dms.report.training_register import training_register as register
+
+    filters = {
+        "department": department,
+        "training_type": training_type,
+        "status": status,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    xlsx_rows = register.get_export_rows(filters)
+
+    columns = register._get_columns()
+    fieldnames = [c["fieldname"] for c in columns]
+    highlight_cols = [i for i, f in enumerate(fieldnames) if f in register.HIGHLIGHT_FIELDS]
+    # Per-cell borders (blank cells included) and the bold/centered header come
+    # from the shared helper; the two highlighted date columns add the yellow
+    # fill and the dd-mmm-yyyy date format on top.
+    from quality_dms.dms import excel_style
+
+    styles = excel_style.bordered_styles(
+        len(fieldnames),
+        len(xlsx_rows),
+        column_formats={
+            i: {"bg_color": "#FFFF00", "num_format": excel_style.EXCEL_DATE_FORMAT} for i in highlight_cols
+        },
+        rows=xlsx_rows,
+    )
+    widths = [c["width"] // 7 for c in columns]
+
+    content = excel_style.make_xlsx_bytes(xlsx_rows, "Training Register", styles, widths)
+    provide_binary_file("Training Register", "xlsx", content)
+
+
+@frappe.whitelist()
+def export_training_assessment_results_register(
+    training_document=None, department=None, employee=None, result=None,
+    from_date=None, to_date=None, include_pending=1,
+):
+    """Export the Training Assessment Results Register as .xlsx with the same
+    filters as the on-screen report (the report module builds the rows and
+    the workbook, so the file can never drift from the screen)."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export the assessment register.", frappe.PermissionError)
+
+    from frappe.desk.utils import provide_binary_file
+
+    from quality_dms.dms.report.training_assessment_results_register import (
+        training_assessment_results_register as register,
+    )
+
+    content = register.build_workbook(
+        {
+            "training_document": training_document,
+            "department": department,
+            "employee": employee,
+            "result": result,
+            "from_date": from_date,
+            "to_date": to_date,
+            "include_pending": include_pending,
+        }
+    )
+    provide_binary_file("Training Assessment Results Register", "xlsx", content)
+
+
+# ── Training Analytics: Employee Scores / Pending Trainings Excel exports ───
+
+_ANALYTICS_TEXT_MAX = 200
+
+# Columns and order are exactly the page's CSV download for each table.
+# `sort_keys` are the columns the page lets you sort by; `numeric_sort` selects
+# which of the page's two comparators applies (see _compare_like_the_page).
+_ANALYTICS_TABLES = {
+    "employee_scores": {
+        "sheet": "Employee Scores",
+        "headers": ["Employee", "Department", "Completed", "Total", "Completion %", "Overall Score"],
+        "row": lambda r: [
+            r.get("employee_name") or r.get("employee"), r.get("department"), r.get("completed"),
+            r.get("total"), r.get("completion_pct"), r.get("overall_score"),
+        ],
+        "sort_keys": ("employee_name", "department", "completed", "completion_pct", "overall_score"),
+        "default_sort": ("overall_score", "desc"),
+        "numeric_sort": True,
+    },
+    "pending_trainings": {
+        "sheet": "Pending Trainings",
+        "headers": ["Employee", "Department", "Document", "Status", "Due Date"],
+        "row": lambda r: [
+            r.get("employee_name"), r.get("department"), r.get("document"), r.get("status"), r.get("due_date"),
+        ],
+        "sort_keys": ("employee_name", "department", "document", "status", "due_date_raw"),
+        "default_sort": ("due_date_raw", "asc"),
+        "numeric_sort": False,
+    },
+}
+
+
+def _analytics_text_param(value, label):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        frappe.throw(f"{label} must be text.")
+    if len(value) > _ANALYTICS_TEXT_MAX:
+        frappe.throw(f"{label} is too long (maximum {_ANALYTICS_TEXT_MAX} characters).")
+    return value
+
+
+def _analytics_date_param(value, label):
+    if value in (None, ""):
+        return None
+    try:
+        return str(frappe.utils.getdate(value))
+    except Exception:
+        frappe.throw(f"{label} is not a valid date.")
+
+
+# Order of ASCII punctuation/symbols in the Unicode root collation (CLDR) the
+# browser's localeCompare uses: whitespace < these < digits < letters.
+_ICU_PUNCTUATION = "_-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$"
+# Letters the root collation treats as variants of a base letter.
+_LETTER_VARIANTS = {"ø": "o", "ł": "l", "đ": "d", "ð": "d", "ħ": "h", "æ": "ae", "œ": "oe", "þ": "th"}
+
+
+def _icu_primary_weight(ch):
+    if ch.isspace():
+        return (0, ord(ch))
+    position = _ICU_PUNCTUATION.find(ch)
+    if position >= 0:
+        return (1, position)
+    if ch.isdecimal():
+        return (2, ord(ch))
+    if ch.isalpha():
+        return (3, ord(ch))
+    return (1, len(_ICU_PUNCTUATION) + ord(ch))  # other symbols: after ASCII punctuation
+
+
+def _locale_sort_key(value):
+    """Approximates the browser's String.localeCompare (CLDR root collation):
+    compare character by character ignoring case and accents, with whitespace
+    before punctuation before digits before letters; then break ties on
+    accents, then on case (lowercase first). See _compare_like_the_page for the
+    known remaining differences."""
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(value))
+    base = "".join(ch for ch in text if not unicodedata.combining(ch)).casefold()
+    base = "".join(_LETTER_VARIANTS.get(ch, ch) for ch in base)
+    primary = tuple(_icu_primary_weight(ch) for ch in base)
+    # last tiebreak: strings that only differ in a way the levels above fold
+    # together (for example "ss" and "ß") keep a stable, browser-like order
+    return (primary, text.casefold(), str(value).swapcase(), str(value))
+
+
+def _three_way(a, b):
+    return (a > b) - (a < b)
+
+
+def _compare_like_the_page(a, b, key, direction, numeric_sort):
+    """Port of the two row comparators in training_analytics.js.
+
+    numeric_sort (Employee Scores): missing values become +/-Infinity so they
+    always sort last; two strings use localeCompare; a string against a number
+    is NaN in the page, i.e. "equal". Otherwise (Pending Trainings): both
+    values are coerced with `|| ""` and compared as strings, so a missing value
+    sorts as "". Descending swaps the operands, so ties keep the server order
+    in both directions (Array.sort and list.sort are both stable).
+
+    Known difference: the browser uses ICU collation for its locale, while
+    _locale_sort_key is an approximation. Row sets and values are identical;
+    only names containing unusual punctuation or non-Latin scripts could order
+    differently.
+    """
+    import math
+
+    if numeric_sort:
+        missing = math.inf if direction == "asc" else -math.inf
+        av, bv = a.get(key), b.get(key)
+        av = missing if av is None else av
+        bv = missing if bv is None else bv
+        if isinstance(av, str) and isinstance(bv, str):
+            left, right = (av, bv) if direction == "asc" else (bv, av)
+            return _three_way(_locale_sort_key(left), _locale_sort_key(right))
+        if isinstance(av, str) or isinstance(bv, str):
+            return 0
+        left, right = (av, bv) if direction == "asc" else (bv, av)
+        return _three_way(left, right)
+
+    av, bv = str(a.get(key) or ""), str(b.get(key) or "")
+    left, right = (av, bv) if direction == "asc" else (bv, av)
+    return _three_way(_locale_sort_key(left), _locale_sort_key(right))
+
+
+def _filter_analytics_rows(rows, employee_filter, department_filter):
+    """The same case-insensitive "contains" filters as the page's typeahead boxes."""
+    if employee_filter:
+        needle = employee_filter.lower()
+        rows = [r for r in rows if needle in (r.get("employee_name") or "").lower()]
+    if department_filter:
+        needle = department_filter.lower()
+        rows = [r for r in rows if needle in (r.get("department") or "").lower()]
+    return rows
+
+
+def _sort_analytics_rows(rows, spec, sort_key, sort_dir):
+    import functools
+
+    return sorted(
+        rows,
+        key=functools.cmp_to_key(
+            lambda a, b: _compare_like_the_page(a, b, sort_key, sort_dir, spec["numeric_sort"])
+        ),
+    )
+
+
+@frappe.whitelist()
+def export_analytics_table(
+    table=None, from_date=None, to_date=None, department=None,
+    employee_filter=None, department_filter=None, sort_key=None, sort_dir=None,
+):
+    """Excel export of the Training Analytics "Employee Scores" or "Pending
+    Trainings" table, matching what the page shows for its current date and
+    department filters, typeahead boxes and selected sort.
+
+    Rows are rebuilt on the server from get_training_analytics -- nothing the
+    browser could tamper with is written to the file -- and the workbook is
+    written with explicit cell types (excel_style.build_workbook) so text such
+    as "=1+1" stays text. CSV downloads and the Assessment Scores export are
+    separate and unchanged."""
+    if not _is_admin_user():
+        frappe.throw("Only managers can export training analytics.", frappe.PermissionError)
+
+    spec = _ANALYTICS_TABLES.get(table) if isinstance(table, str) else None
+    if not spec:
+        frappe.throw("Unknown analytics table. Expected 'employee_scores' or 'pending_trainings'.")
+
+    if bool(sort_key) != bool(sort_dir):
+        frappe.throw("sort_key and sort_dir must be given together.")
+    if sort_key:
+        if sort_key not in spec["sort_keys"]:
+            frappe.throw(f"Cannot sort {spec['sheet']} by '{sort_key}'.")
+        if sort_dir not in ("asc", "desc"):
+            frappe.throw("sort_dir must be 'asc' or 'desc'.")
+    else:
+        sort_key, sort_dir = spec["default_sort"]
+
+    from_date = _analytics_date_param(from_date, "From date")
+    to_date = _analytics_date_param(to_date, "To date")
+    department = _analytics_text_param(department, "Department") or None
+    employee_filter = _analytics_text_param(employee_filter, "Employee filter")
+    department_filter = _analytics_text_param(department_filter, "Department filter")
+
+    rows = get_training_analytics(from_date, to_date, department)[table]
+    rows = _filter_analytics_rows(rows, employee_filter, department_filter)
+    rows = _sort_analytics_rows(rows, spec, sort_key, sort_dir)
+
+    from frappe.desk.utils import provide_binary_file
+
+    from quality_dms.dms import excel_style
+
+    xlsx_rows = [spec["headers"]] + [spec["row"](r) for r in rows]
+    provide_binary_file(spec["sheet"], "xlsx", excel_style.build_workbook(spec["sheet"], xlsx_rows))
+
+
 @frappe.whitelist()
 def get_training_analytics(from_date=None, to_date=None, department=None):
     if not _is_admin_user():
@@ -1177,6 +1619,8 @@ def get_training_analytics(from_date=None, to_date=None, department=None):
         })
     employee_scores.sort(key=lambda r: (r["overall_score"] is None, -(r["overall_score"] or 0)))
 
+    assessment_scores = _get_assessment_scores(from_date, to_date, department)
+
     # ---- Every employee's pending/overdue trainings, org-wide (managers need
     # to see everyone's outstanding items, not just the aggregate rate) ----
     pending_conditions = ["da.status IN ('Pending', 'Overdue', 'In Progress', 'Failed')"]
@@ -1230,6 +1674,7 @@ def get_training_analytics(from_date=None, to_date=None, department=None):
         "completion_by_department": completion_by_department,
         "overdue_trend": overdue_trend,
         "employee_scores": employee_scores,
+        "assessment_scores": assessment_scores,
         "pending_trainings": pending_trainings,
         "total_attempts": len(all_scores),
     }

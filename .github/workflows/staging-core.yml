@@ -1,0 +1,252 @@
+name: Staging core (reusable)
+
+# Shared by "Deploy to Staging" and "Rollback Staging" so both run the exact same,
+# tested steps: disk preflight -> verified pre-deploy backup -> pull the image
+# for ONE commit SHA -> recreate -> migrate -> reimport fixtures -> smoke checks.
+# Every run is recorded in the GitHub "staging" deployment ledger (Deployments
+# page): the commit SHA that was run, who triggered it, the run link, and the
+# result. Rollback reads that ledger to find "the version before this one".
+# Not meant to be run directly.
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: "Full commit SHA whose image (tag = first 12 chars) to run"
+        required: true
+        type: string
+      action:
+        description: "deploy | rollback (label only, recorded in the ledger)"
+        required: true
+        type: string
+      skip_backup:
+        description: "EMERGENCY ONLY: skip the pre-deploy backup"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  APP_IMAGE_NAME: hephzibahtechnologies/frappe-code
+
+jobs:
+  run:
+    name: ${{ inputs.action }} on crm-docker-build (72.167.140.185)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Record deployment start (ledger)
+        id: ledger
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          ACTION: ${{ inputs.action }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TAG="${SHA::12}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          DEP_ID=$(jq -nc --arg ref "$SHA" --arg desc "${ACTION} ${TAG}" --arg tag "$TAG" --arg act "$ACTION" --arg run "$RUN_URL" --arg by "${{ github.actor }}"             '{ref:$ref, environment:"staging", auto_merge:false, required_contexts:[], production_environment:false, description:$desc, payload:{image_tag:$tag, action:$act, run:$run, by:$by}}'             | gh api -X POST "repos/${{ github.repository }}/deployments" --input - --jq .id)
+          echo "deployment_id=${DEP_ID}" >> "$GITHUB_OUTPUT"
+          gh api -X POST "repos/${{ github.repository }}/deployments/${DEP_ID}/statuses"             -f state=in_progress -f log_url="$RUN_URL" -f description="${ACTION} ${TAG} started" >/dev/null
+          echo "Ledger entry ${DEP_ID} created for ${TAG}"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}          # 72.167.140.185
+          username: ${{ secrets.STAGING_USER }}       # htipladmin
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: 22
+          command_timeout: 20m
+          script: |
+            set -e
+            set -o pipefail
+            IMAGE_TAG="${{ steps.ledger.outputs.tag }}"
+            IMAGE="${{ env.REGISTRY }}/${{ env.APP_IMAGE_NAME }}:${IMAGE_TAG}"
+            PREV_TAG=$(grep '^CUSTOM_TAG=' /home/htipladmin/crm-docker-build/.env | cut -d= -f2 || true)
+            cd /home/htipladmin/crm-docker-build
+
+            echo "=== Logging in to GHCR ==="
+            echo "${{ secrets.GHCR_PULL_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u "${{ secrets.STAGING_USER }}" --password-stdin
+
+            echo "=== Preflight: free disk space ==="
+            MIN_FREE_GB=25   # ~16 GB image + backup + headroom
+            FREE_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+            echo "Free on /: ${FREE_GB} GB (need >= ${MIN_FREE_GB} GB)"
+            if [ "${FREE_GB}" -lt "${MIN_FREE_GB}" ]; then
+              echo "ABORT: not enough free disk space — nothing has been changed. Free space (e.g. 'sudo docker image prune -f') and re-run."
+              exit 1
+            fi
+
+            echo "=== Pulling ${IMAGE} ==="
+            sudo docker pull "${IMAGE}"
+            sudo docker tag "${IMAGE}" crm-deploy:${IMAGE_TAG}
+
+            if [ "${{ inputs.skip_backup }}" = "true" ]; then
+              echo "WARNING: skip_backup=true — deploying WITHOUT a pre-deploy backup."
+            else
+              echo "=== Pre-deploy backup (database + files) — nothing is changed until this succeeds ==="
+              BACKUP_ROOT=/home/htipladmin/backups/crm
+              KEEP=7
+              STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+              DEST="${BACKUP_ROOT}/${STAMP}_to-${IMAGE_TAG}"
+              PREV_TAG=$(grep '^CUSTOM_TAG=' .env | cut -d= -f2 || true)
+              PREV_IMAGE_ID=$(sudo docker inspect crm-backend-1 --format '{{.Image}}' 2>/dev/null || true)
+              if [ -z "${PREV_IMAGE_ID}" ]; then
+                echo "ABORT: crm-backend-1 is not running, so a backup cannot be taken. Nothing has been changed. Start it, or re-run with skip_backup=true if you accept deploying without a backup."
+                exit 1
+              fi
+
+              umask 077
+              mkdir -p "${DEST}"
+              # mariadb-dump in the app image insists on SSL but the db container has none
+              # ("SSL is required, but the server does not support it"), which made every
+              # bench backup fail. Point the client at a throwaway my.cnf with skip-ssl,
+              # for this one command only.
+              sudo docker exec crm-backend-1 bash -c 'mkdir -p /tmp/mycnf && printf "[client]\nskip-ssl\n" > /tmp/mycnf/my.cnf'
+              BK_RC=0
+              OUT=$(sudo docker exec -e MYSQL_HOME=/tmp/mycnf crm-backend-1 bench --site mysite.local backup --with-files 2>&1 | tr '\r' '\n') || BK_RC=$?
+              echo "${OUT}"
+              if [ "${BK_RC}" -ne 0 ]; then
+                echo "ABORT: bench backup failed (exit ${BK_RC}) — nothing has been changed."
+                rmdir "${DEST}" 2>/dev/null || true
+                exit 1
+              fi
+              FILES=$(echo "${OUT}" | grep -o '/[^ ]*/mysite.local/private/backups/[^ ]*' | sort -u || true)
+              if [ "$(echo "${FILES}" | grep -c .)" -lt 3 ]; then
+                echo "ABORT: bench backup did not report the expected files — nothing has been changed."
+                rmdir "${DEST}" 2>/dev/null || true
+                exit 1
+              fi
+              for f in ${FILES}; do
+                sudo docker cp "crm-backend-1:${f}" "${DEST}/"
+              done
+              sudo chown -R "$(id -u):$(id -g)" "${DEST}"
+              chmod -R go-rwx "${DEST}"
+
+              echo "--- verifying backup files ---"
+              gzip -t "${DEST}"/*-database.sql.gz
+              for t in "${DEST}"/*-files.tar; do tar -tf "$t" >/dev/null; done
+
+              {
+                echo "timestamp_utc=${STAMP}"
+                echo "deploy_target_tag=${IMAGE_TAG}"
+                echo "target_image_id=$(sudo docker image inspect "${IMAGE}" --format '{{.Id}}')"
+                echo "target_repo_digests=$(sudo docker image inspect "${IMAGE}" --format '{{join .RepoDigests ","}}')"
+                echo "previous_tag=${PREV_TAG}"
+                echo "previous_image_id=${PREV_IMAGE_ID}"
+                echo "previous_repo_digests=$(sudo docker image inspect "${PREV_IMAGE_ID}" --format '{{join .RepoDigests ","}}' 2>/dev/null || true)"
+                echo "workflow_run=${{ github.run_id }}"
+                echo "triggered_by=${{ github.actor }}"
+              } > "${DEST}/MANIFEST.txt"
+
+              # Backup is safely on the host and verified: drop this run's copies
+              # (absolute paths bench itself reported) inside the sites volume so they do not accumulate there too.
+              for f in ${FILES}; do
+                sudo docker exec crm-backend-1 rm -f "${f}"
+              done
+
+              # Retention: keep the newest ${KEEP} backup folders (name starts with the UTC stamp).
+              find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '2*T*Z_to-*' | sort | head -n -${KEEP} | xargs -r rm -rf
+              echo "Backup saved: ${DEST} ($(du -sh "${DEST}" | cut -f1))"
+            fi
+
+            echo "=== Updating .env — same folder, same volumes, no data touched ==="
+            sed -i "s/^CUSTOM_TAG=.*/CUSTOM_TAG=${IMAGE_TAG}/" .env
+
+            echo "=== Recreating all app-tier services from the new tag ==="
+            sudo docker compose up -d
+
+            echo "=== Waiting for backend to become healthy before migrating ==="
+            for i in $(seq 1 30); do
+              if sudo docker exec crm-backend-1 curl -sf -H "Host: mysite.local" http://localhost:8000/api/method/ping >/dev/null 2>&1; then
+                echo "Backend is up."
+                break
+              fi
+              echo "Backend not ready yet, waiting... ($i/30)"
+              sleep 5
+              if [ "$i" -eq 30 ]; then
+                echo "Backend never became healthy — aborting before migrate."
+                exit 1
+              fi
+            done
+
+            echo "=== Running bench migrate (schema/patches — do NOT skip, do NOT run manually on the server) ==="
+            echo "=== (scoped to mysite.local, not 'all' — unrelated/broken sites on this box must not fail this job) ==="
+            echo "=== (piped through tr to flatten the progress bar's \r output — appleboy/ssh-action mis-parses raw \r and can report a false failure even when migrate succeeds) ==="
+            sudo docker exec crm-backend-1 bench --site mysite.local migrate 2>&1 | tr '\r' '\n'
+
+            echo "=== Force-reimporting DMS + ERPNext Projects/Support Workspace/Number Card/Dashboard Chart/Sidebar fixtures ==="
+            echo "=== (bench migrate skips these if the DB record's modified timestamp is >= the file's — a UI edit or prior now()-stamp makes it no-op; force=True below bypasses that. See quality_dms dashboard incident 2026-07-28 and the Defect-in-Projects fix.) ==="
+            for f in \
+              apps/quality_dms/quality_dms/dms/workspace/dms/dms.json \
+              apps/quality_dms/quality_dms/dms/number_card/pending_revision_requests/pending_revision_requests.json \
+              apps/quality_dms/quality_dms/dms/number_card/total_revisions/total_revisions.json \
+              apps/quality_dms/quality_dms/dms/number_card/total_documents/total_documents.json \
+              apps/quality_dms/quality_dms/dms/number_card/draft_documents/draft_documents.json \
+              apps/quality_dms/quality_dms/dms/number_card/published_documents/published_documents.json \
+              apps/quality_dms/quality_dms/dms/number_card/documents_in_review/documents_in_review.json \
+              apps/quality_dms/quality_dms/dms/number_card/obsolete_documents/obsolete_documents.json \
+              apps/quality_dms/quality_dms/dms/number_card/approved_documents/approved_documents.json \
+              apps/quality_dms/quality_dms/dms/dashboard_chart/training_compliance_by_department/training_compliance_by_department.json \
+              apps/quality_dms/quality_dms/dms/dashboard_chart/documents_by_status/documents_by_status.json \
+              apps/quality_dms/quality_dms/workspace_sidebar/dms.json \
+              apps/erpnext/erpnext/projects/workspace/projects/projects.json \
+              apps/erpnext/erpnext/support/workspace/support/support.json \
+            ; do
+              full="/home/frappe/frappe-bench/${f}"
+              echo "--- reimporting ${full} ---"
+              sudo docker exec crm-backend-1 bench --site mysite.local execute frappe.modules.import_file.import_file_by_path \
+                --kwargs "{\"path\": \"${full}\", \"force\": True, \"ignore_version\": True}" || echo "WARNING: reimport failed for ${full}, continuing"
+            done
+
+            echo "=== Clearing Frappe cache (avoid stale asset-hash HTML) ==="
+            sudo docker exec crm-backend-1 bench --site mysite.local clear-cache || true
+            sudo docker exec crm-backend-1 bench --site mysite.local clear-website-cache || true
+
+            echo "=== Pruning old crm-deploy tags (keep current) ==="
+            sudo docker images crm-deploy --format '{{.Tag}}' \
+              | grep -v "^${IMAGE_TAG}\$" \
+              | xargs -r -I{} sudo docker rmi crm-deploy:{} || true
+
+            echo "=== Post-deploy smoke checks ==="
+            SMOKE_OK=1
+            for path in /api/method/ping /login /assets/crm_unify/js/crm_theme.js; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: qa.sbiqc.com" "http://127.0.0.1:8000${path}" || true)
+              echo "${path} -> ${code}"
+              [ "${code}" = "200" ] || SMOKE_OK=0
+            done
+            if [ "${SMOKE_OK}" != "1" ]; then
+              echo "SMOKE CHECK FAILED — the new version is running but did not answer correctly. Consider running the Rollback workflow."
+              exit 1
+            fi
+            echo "RESULT target_tag=${IMAGE_TAG} previous_tag=${PREV_TAG:-unknown}"
+
+            echo "=== Deployment complete: ${IMAGE} ==="
+
+      - name: Record deployment result (ledger)
+        if: always() && steps.ledger.outputs.deployment_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          DEP_ID: ${{ steps.ledger.outputs.deployment_id }}
+          TAG: ${{ steps.ledger.outputs.tag }}
+          ACTION: ${{ inputs.action }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          case "$JOB_STATUS" in success) STATE=success;; cancelled) STATE=error;; *) STATE=failure;; esac
+          gh api -X POST "repos/${{ github.repository }}/deployments/${DEP_ID}/statuses"             -f state="$STATE" -f log_url="$RUN_URL" -f description="${ACTION} ${TAG}: ${STATE}" >/dev/null
+          {
+            echo "### Staging ${ACTION}: ${STATE}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version (commit) | \`${{ inputs.sha }}\` |"
+            echo "| Image tag | \`${TAG}\` |"
+            echo "| Triggered by | ${{ github.actor }} |"
+            echo "| Backup | /home/htipladmin/backups/crm/ (newest folder; see its MANIFEST.txt) |"
+            echo "| Ledger | Repo → Deployments → staging |"
+          } >> "$GITHUB_STEP_SUMMARY"

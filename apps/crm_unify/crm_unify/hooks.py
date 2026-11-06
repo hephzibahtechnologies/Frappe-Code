@@ -45,7 +45,7 @@ fixtures = [
 	},
 	{
 		"dt": "Property Setter",
-		"filters": [["name", "in", ["Quotation-quotation_to-link_filters", "Lead-main-track_changes", "Opportunity-main-track_changes"]]],
+		"filters": [["name", "in", ["Quotation-quotation_to-link_filters", "Lead-main-track_changes", "Opportunity-main-track_changes", "Lead-status-options"]]],
 	},
 	{
 		"dt": "Kanban Board",

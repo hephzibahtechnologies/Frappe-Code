@@ -17,7 +17,7 @@
         }}</span>
       </div>
       <div class="ml-auto whitespace-nowrap">
-        <Tooltip :text="dateFormat(activity.creation, 'MMM D, dddd')">
+        <Tooltip :text="dateFormat(activity.creation, callDayFormat)">
           <div class="text-sm text-ink-gray-5">
             {{ __(timeAgo(activity.creation)) }}
           </div>
@@ -57,7 +57,7 @@
         </div>
       </div>
       <div class="flex items-center flex-wrap gap-2">
-        <Badge :label="dateFormat(activity.creation, 'MMM D, dddd')">
+        <Badge :label="dateFormat(activity.creation, callDayFormat)">
           <template #prefix>
             <CalendarIcon class="size-3" />
           </template>
@@ -96,6 +96,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { displayFormat } from "@/dateDisplayFormat";
 import { dateFormat, timeAgo } from "@/utils";
 import { Avatar, Badge, Tooltip } from "frappe-ui";
 import { inject, ref } from "vue";
@@ -110,6 +111,9 @@ import CallLogModal from "@/pages/call-logs/CallLogModal.vue";
 const props = defineProps({
   activity: Object,
 });
+
+// Day label of a call activity; follows the site format only when it is dd-MMM-yyyy.
+const callDayFormat = displayFormat("MMM D, dddd", "DD-MMM-YYYY, dddd");
 
 const showCallLogDetailModal = ref(false);
 const showCallLogModal = ref(false);
