@@ -49,7 +49,8 @@ RUN bench setup env && \
     env/bin/pip install -e apps/sbiqc_provisioning && \
     env/bin/pip install -e apps/quality_dms && \
     env/bin/pip install -e apps/crm_unify && \
-    env/bin/pip install -e apps/mercury
+    env/bin/pip install -e apps/mercury && \
+    env/bin/pip install -e apps/sbiqc_core
 
 # Install frontend dependencies for all apps
 RUN cd apps/frappe   && yarn install --frozen-lockfile && cd ../.. && \
@@ -59,7 +60,7 @@ RUN cd apps/frappe   && yarn install --frozen-lockfile && cd ../.. && \
     cd apps/helpdesk && yarn install --frozen-lockfile 2>/dev/null || true && cd ../..
 
 # Build frontend assets — compiles Vue/JS bundles for CRM, Helpdesk, etc.
-RUN bench build --app frappe --app erpnext --app crm --app hrms --app helpdesk --app telephony --app quality_dms --app mercury || true
+RUN bench build --app frappe --app erpnext --app crm --app hrms --app helpdesk --app telephony --app quality_dms --app mercury --app sbiqc_core || true
 
 # Regenerate Procfile with correct container paths; strip local redis entries
 # (Redis runs in separate containers — no redis-server binary needed here)

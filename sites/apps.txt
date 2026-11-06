@@ -8,3 +8,4 @@ quality_dms
 mercury
 crm
 sbiqc_provisioning
+sbiqc_core

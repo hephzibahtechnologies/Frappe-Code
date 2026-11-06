@@ -47,6 +47,27 @@ from sbiqc_provisioning.sbiqc_provisioning.doctype.provisioning_log.provisioning
 )
 
 
+# Apps every tenant site must have, whatever the tenant itself selected. sbiqc_core holds
+# site-wide behaviour (the optional global date format) that has to be identical on every
+# site; besides Frappe and ERPNext, which must not be modified, it is the only app
+# guaranteed to be everywhere. Add a name here and it is installed on every new tenant and
+# back-filled on existing ones (ensure_required_apps_on_existing_tenants). These apps are
+# implicit: they are never written into Tenant.apps_to_install or announced to the client.
+ALWAYS_INSTALL_APPS = ("sbiqc_core",)
+
+
+def with_required_apps(app_names):
+	"""app_names plus the mandatory apps: no duplicates, original order kept."""
+	return list(dict.fromkeys([*app_names, *ALWAYS_INSTALL_APPS]))
+
+
+def get_install_order(app_names):
+	"""Install order for a new site: erpnext first, then everything else (the mandatory
+	apps included) in sorted order."""
+	rest = [a for a in with_required_apps(app_names) if a != "erpnext"]
+	return ["erpnext"] + sorted(rest)
+
+
 def provision_tenant(tenant_name):
 	"""Main entry point — called by the background job queue."""
 	frappe.init(site=frappe.local.site)
@@ -108,10 +129,7 @@ def provision_tenant(tenant_name):
 		frappe.publish_progress(25, title=_("Provisioning {0}").format(site_name))
 
 		# Step 2: Install apps — skip already-installed, erpnext first
-		app_names = [row.app_name for row in tenant.apps_to_install]
-		if "erpnext" in app_names:
-			app_names.remove("erpnext")
-		install_order = ["erpnext"] + sorted(app_names)
+		install_order = get_install_order([row.app_name for row in tenant.apps_to_install])
 
 		_clear_stale_locks(site_name, bench_path)
 		already_installed = _get_installed_apps(site_name, bench_path)
@@ -434,7 +452,45 @@ def _get_installed_apps(site_name, bench_path):
 	)
 	if result.returncode != 0:
 		return set()
-	return {line.strip() for line in result.stdout.strip().splitlines() if line.strip()}
+	# `bench list-apps` prints "<app>  <version> <git info>" per line; keep just the name
+	return {line.split()[0] for line in result.stdout.strip().splitlines() if line.strip()}
+
+
+def ensure_required_apps_on_existing_tenants(dry_run=False):
+	"""Make sure every Active tenant site has the mandatory apps (sbiqc_core).
+
+	Idempotent: a tenant that already has them is left alone, and a site whose apps
+	cannot be read is skipped rather than guessed at. Missing apps are installed by
+	queueing the same provision_update job the Tenant form uses, one job per tenant,
+	so each site gets the normal install, migrate, cache clear and its own log.
+
+	Returns one dict per tenant describing what was (or, with dry_run, would be) done.
+	"""
+	bench_path = frappe.utils.get_bench_path()
+	report = []
+	for tenant in frappe.get_all("Tenant", filters={"status": "Active"}, fields=["name", "site_name"]):
+		installed = _get_installed_apps(tenant.site_name, bench_path)
+		entry = {"tenant": tenant.name, "site": tenant.site_name}
+		if not installed:
+			report.append({**entry, "action": "skipped: could not read the installed apps"})
+			continue
+
+		missing = [app for app in ALWAYS_INSTALL_APPS if app not in installed]
+		if not missing:
+			report.append({**entry, "action": "already has the required apps"})
+			continue
+
+		if not dry_run:
+			frappe.enqueue(
+				"sbiqc_provisioning.provisioner.engine.provision_update",
+				tenant_name=tenant.name,
+				apps_to_add=missing,
+				queue="long",
+				timeout=1800,
+				now=frappe.in_test,
+			)
+		report.append({**entry, "action": ("would install " if dry_run else "queued install of ") + ", ".join(missing)})
+	return report
 
 
 def _clear_stale_locks(site_name, bench_path):
@@ -588,7 +644,7 @@ def provision_update(tenant_name, apps_to_add):
 		update_log_step(log_name, "Starting app update", 5)
 		_clear_stale_locks(site_name, bench_path)
 		already_installed = _get_installed_apps(site_name, bench_path)
-		to_install = [a for a in apps_to_add if a not in already_installed]
+		to_install = [a for a in with_required_apps(apps_to_add) if a not in already_installed]
 		to_install = list(dict.fromkeys(to_install))  # preserve order, remove dupes
 
 		if not to_install:
@@ -607,11 +663,14 @@ def provision_update(tenant_name, apps_to_add):
 
 		# Append new apps to Tenant.apps_to_install child table
 		tenant.reload()
+		# The mandatory apps are implicit on every site: not written into the tenant's app
+		# list (Tenant App only offers a fixed set of choices) and not announced to the client.
+		chosen = [a for a in to_install if a not in ALWAYS_INSTALL_APPS]
 		existing_apps = {row.app_name for row in tenant.apps_to_install}
-		for app in to_install:
+		for app in chosen:
 			if app not in existing_apps:
 				tenant.append("apps_to_install", {"app_name": app})
-		if to_install:
+		if chosen:
 			tenant.flags.ignore_validate_update_after_submit = True
 			tenant.save(ignore_permissions=True)  # background worker has no session user context
 		frappe.db.commit()
@@ -619,8 +678,8 @@ def provision_update(tenant_name, apps_to_add):
 		_update_status(tenant, "Active")
 		complete_log(log_name)
 
-		if to_install:
-			_send_app_update_email(tenant, to_install)
+		if chosen:
+			_send_app_update_email(tenant, chosen)
 
 	except Exception:
 		tb = traceback.format_exc()
