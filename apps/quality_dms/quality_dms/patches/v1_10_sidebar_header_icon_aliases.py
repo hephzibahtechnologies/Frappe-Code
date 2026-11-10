@@ -5,7 +5,8 @@
 # (frappe sidebar_header.js set_header_icon) looks up a Desktop Icon whose LABEL
 # equals the Sidebar NAME. Where the tile label differs from the sidebar name
 # (e.g. tile "SBIQC CRM" opens sidebar "FCRM") nothing matches and a grey letter
-# is shown. This adds hidden alias Desktop Icons named after those sidebars,
+# is shown. (No link_to: Desktop Icon validates it against the legacy
+# Workspace Sidebar list, where these Sidebars don't exist.) This adds hidden alias Desktop Icons named after those sidebars,
 # carrying the same logo. Hidden, so the desk screen is unchanged.
 # Idempotent: safe to run repeatedly.
 
@@ -35,8 +36,6 @@ def execute():
 				"doctype": "Desktop Icon",
 				"label": sidebar,
 				"icon_type": "Link",
-				"link_type": "Workspace Sidebar",
-				"link_to": sidebar,
 				"app": app,
 				"hidden": 1,
 				"standard": 0,
