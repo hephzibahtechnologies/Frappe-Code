@@ -3,6 +3,13 @@ import frappe
 # Apps whose titles get replaced with "SBIQC" in the sidebar / boot data
 _REBRAND_APPS = {"frappe", "erpnext", "hrms", "helpdesk", "telephony", "crm_unify", "sbiqc_provisioning"}
 
+# Apps whose own logo (the "E" mark) is replaced with the SBIQC logo. The sidebar header of an
+# app without a dock shows its owning app's logo (frappe.boot.app_data[].app_logo_url), which for
+# every ERPNext module (Selling, Buying, Setup, ...) is erpnext's hook-defined logo. Overridden
+# here in boot data so erpnext's own hooks stay untouched.
+_SBIQC_LOGO = "/assets/mercury/images/htipl_logo.png"
+_LOGO_REBRAND_APPS = {"erpnext"}
+
 # Desktop Icon label overrides — name (PK) left unchanged so parent_icon refs still resolve.
 # The fixture JSONs are also patched, so this is a belt-and-suspenders DB sync.
 # Note: "ERPNext" icon is hidden=1 so it's never shown — skip it to avoid duplicate label errors.
@@ -19,6 +26,8 @@ def extend_bootinfo(bootinfo):
 	for app in bootinfo.get("app_data") or []:
 		if app.get("app_name") in _REBRAND_APPS:
 			app["app_title"] = "SBIQC"
+		if app.get("app_name") in _LOGO_REBRAND_APPS:
+			app["app_logo_url"] = _SBIQC_LOGO
 
 	# Ensure sysdefaults app_name is correct in the boot payload
 	if bootinfo.get("sysdefaults"):
