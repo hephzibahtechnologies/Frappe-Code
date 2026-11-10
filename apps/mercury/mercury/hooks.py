@@ -32,7 +32,7 @@ app_license = "mit"
 # Bump ?v= when editing the file so browsers pick the change up (same convention
 # as hrms/quality_dms above it in the include list).
 app_include_css = "/assets/mercury/css/mercury_desk.css?v=23"
-app_include_js = "/assets/mercury/js/mercury_desk.js?v=4"
+app_include_js = "/assets/mercury/js/mercury_desk.js?v=5"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/mercury/css/mercury.css"

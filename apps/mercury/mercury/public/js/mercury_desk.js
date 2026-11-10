@@ -235,3 +235,41 @@ mercury.about.APP_LOGOS = {
 
 	frappe.ui.misc.__mercury_about = true;
 })();
+
+/* ------------------------------------------------------------------------
+ * Sidebar header logo = the module's desk-tile logo.
+ *
+ * Stock v16 draws the header mark from the owning APP's logo when the app has no dock, so every
+ * ERPNext module (Selling, Buying, Projects ...) showed the same app mark. We want the logo the
+ * module has on the desk grid. Same order the grid uses: the app's solid svg for the label, then
+ * the Desktop Icon's logo_url. No match -> stock behaviour (app logo). Wraps core, patches nothing.
+ * ---------------------------------------------------------------------- */
+(function () {
+	const Header = frappe.ui && frappe.ui.SidebarHeader;
+	if (!Header || Header.prototype.__mercury_logo) return;
+
+	const find_icon = (title) => {
+		const icons = frappe.boot.desktop_icons || [];
+		const visible = (i) => !cint(i.hidden);
+		return (
+			icons.find((i) => visible(i) && i.label === title) ||
+			icons.find((i) => visible(i) && i.link_to === title)
+		);
+	};
+
+	const logo_for = (title) => {
+		const icon = find_icon(title);
+		if (!icon) return null;
+		const solid = icon.app && (frappe.boot.desktop_icon_urls?.[icon.app]?.solid || []);
+		const svg = `assets/${icon.app}/icons/desktop_icons/solid/${frappe.scrub(icon.label)}.svg`;
+		const url = solid && solid.includes(svg) ? `/${svg}` : icon.logo_url;
+		if (!url) return null;
+		return `<img src="${frappe.utils.escape_html(url)}" alt="${frappe.utils.escape_html(icon.label)}" />`;
+	};
+
+	const stock = Header.prototype.get_header_logo;
+	Header.prototype.get_header_logo = function () {
+		return logo_for(this.title) || stock.call(this);
+	};
+	Header.prototype.__mercury_logo = true;
+})();
